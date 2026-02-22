@@ -14,6 +14,7 @@ public partial class MainController : Control
     private DeterministicTickScheduler _scheduler = null!;
 
     private Label _coinsLabel = null!;
+    private Label _statsLabel = null!;
     private Label _messageLabel = null!;
 
     public override void _Ready()
@@ -22,6 +23,7 @@ public partial class MainController : Control
         _scheduler = new DeterministicTickScheduler(_session, ticksPerSecond: 10);
 
         _coinsLabel = GetNode<Label>("VBox/CoinsLabel");
+        _statsLabel = GetNode<Label>("VBox/StatsLabel");
         _messageLabel = GetNode<Label>("VBox/MessageLabel");
 
         BindButtons();
@@ -30,12 +32,18 @@ public partial class MainController : Control
 
     public override void _Process(double delta)
     {
-        _scheduler.Advance(delta);
+        var ticks = _scheduler.Advance(delta);
+        if (ticks > 0)
+        {
+            RenderProjection();
+        }
     }
 
     private void BindButtons()
     {
         GetNode<Button>("VBox/Buttons/ExpandTile1").Pressed += () => IssueCommand(new ExpandTileCommand(1));
+        GetNode<Button>("VBox/Buttons/PlaceCampTile0").Pressed += () => IssueCommand(new PlaceBuildingCommand("Camp", 0));
+        GetNode<Button>("VBox/Buttons/UpgradeBuilding1").Pressed += () => IssueCommand(new UpgradeBuildingCommand(1));
         GetNode<Button>("VBox/Buttons/SaveButton").Pressed += SaveState;
         GetNode<Button>("VBox/Buttons/LoadButton").Pressed += LoadState;
     }
@@ -48,23 +56,23 @@ public partial class MainController : Control
 
     private void SaveState()
     {
-        _saveRepository.Save("user://mvp0_save.json", _session.State);
-        _eventSink.Publish(new IDomainEvent[] { new TickProcessedEvent(0) });
-        RenderProjection("Saved to user://mvp0_save.json");
+        _saveRepository.Save("user://mvp1_save.json", _session.State);
+        RenderProjection("Saved to user://mvp1_save.json");
     }
 
     private void LoadState()
     {
-        var loaded = _saveRepository.Load("user://mvp0_save.json");
+        var loaded = _saveRepository.Load("user://mvp1_save.json");
         _session = new GameSession(loaded, _eventSink);
         _scheduler = new DeterministicTickScheduler(_session, ticksPerSecond: 10);
-        RenderProjection("Loaded from user://mvp0_save.json");
+        RenderProjection("Loaded from user://mvp1_save.json");
     }
 
     private void RenderProjection(string? overrideMessage = null)
     {
         var projection = UiProjection.From(_session.State, _eventSink.Events);
         _coinsLabel.Text = $"Coins: {projection.Coins}";
+        _statsLabel.Text = $"Buildings: {projection.BuildingsCount} | Production/tick: {projection.ProductionPerTick}";
         _messageLabel.Text = overrideMessage ?? projection.LastEventMessage;
         _eventSink.Clear();
     }

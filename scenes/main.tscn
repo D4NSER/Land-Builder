@@ -18,16 +18,28 @@ layout_mode = 2
 layout_mode = 2
 text = "Coins: 0"
 
+[node name="StatsLabel" type="Label" parent="VBox"]
+layout_mode = 2
+text = "Buildings: 0 | Production/tick: 0"
+
 [node name="MessageLabel" type="Label" parent="VBox"]
 layout_mode = 2
 text = "Ready"
 
-[node name="Buttons" type="HBoxContainer" parent="VBox"]
+[node name="Buttons" type="VBoxContainer" parent="VBox"]
 layout_mode = 2
 
 [node name="ExpandTile1" type="Button" parent="VBox/Buttons"]
 layout_mode = 2
-text = "Expand Tile 1"
+text = "Expand Tile 1 (10 coins)"
+
+[node name="PlaceCampTile0" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place Camp on Tile 0 (12 coins)"
+
+[node name="UpgradeBuilding1" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Upgrade Building 1"
 
 [node name="SaveButton" type="Button" parent="VBox/Buttons"]
 layout_mode = 2

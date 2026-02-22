@@ -8,3 +8,4 @@ Structured project documentation is being developed in stages.
 - Stage 4: Minimum Viable Product Definition → `docs/stage4_mvp_definition.md`
 - Stage 5: Implementation Roadmap → `docs/stage5_implementation_roadmap.md`
 - Stage 6 (MVP-0): Step-by-Step Build Guidance → `docs/stage6_mvp0_vertical_slice.md`
+- Stage 6 (MVP-1): Core Playable Loop Build → `docs/stage6_mvp1_build.md`
