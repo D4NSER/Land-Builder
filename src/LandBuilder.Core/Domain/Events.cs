@@ -10,4 +10,4 @@ public sealed record BuildingUpgradedEvent(int BuildingId, int NewLevel) : IDoma
 public sealed record UnlockFlagGrantedEvent(string UnlockFlag) : IDomainEvent;
 public sealed record ObjectiveCompletedEvent(string ObjectiveId, string Message) : IDomainEvent;
 public sealed record TickProcessedEvent(int StepCount) : IDomainEvent;
-public sealed record CommandRejectedEvent(string Reason) : IDomainEvent;
+public sealed record CommandRejectedEvent(ValidationReasonCode ReasonCode, string Reason) : IDomainEvent;

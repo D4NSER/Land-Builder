@@ -1,5 +1,46 @@
 namespace LandBuilder.Domain;
 
+public enum ValidationReasonCode
+{
+    None = 0,
+    UnknownCommand = 1,
+    TileNotFound = 2,
+    TileNotUnlockable = 3,
+    NoAdjacentUnlockedTile = 4,
+    InsufficientCoins = 5,
+    UnknownBuildingType = 6,
+    BuildingTypeNotUnlocked = 7,
+    TileNotBuildable = 8,
+    TerrainMismatch = 9,
+    NoBuildingSlotsAvailable = 10,
+    BuildingNotFound = 11,
+    BuildingAlreadyMaxLevel = 12
+}
+
+public enum TileStateKind
+{
+    Locked = 0,
+    Unlockable = 1,
+    Unlocked = 2,
+    Buildable = 3
+}
+
+public sealed record ExpansionValidationResult(
+    bool IsValid,
+    ValidationReasonCode ReasonCode,
+    string Message,
+    int Cost,
+    int TileDepth,
+    int NextUnlockIndex,
+    TileStateKind TileState);
+
+public sealed record PlacementValidationResult(
+    bool IsValid,
+    ValidationReasonCode ReasonCode,
+    string Message,
+    int Cost,
+    TileStateKind TileState);
+
 public static class DeterministicSimulator
 {
     private static readonly Dictionary<string, BuildingDefinition> BuildingDefinitions = new()
@@ -16,31 +57,94 @@ public static class DeterministicSimulator
             PlaceBuildingCommand place => ApplyPlaceBuilding(state, place),
             UpgradeBuildingCommand upgrade => ApplyUpgradeBuilding(state, upgrade),
             TickCommand tick => ApplyTick(state, tick),
-            _ => (state, new List<IDomainEvent> { new CommandRejectedEvent("Unknown command") })
+            _ => (state, new List<IDomainEvent> { Reject(ValidationReasonCode.UnknownCommand) })
         };
 
         return EvaluateObjectives(nextState, events);
     }
 
-    private static (GameState, List<IDomainEvent>) ApplyExpand(GameState state, ExpandTileCommand command)
+    public static ExpansionValidationResult ValidateExpansion(GameState state, int tileId)
     {
-        if (!state.World.Tiles.TryGetValue(command.TileId, out var tile))
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Tile not found") });
+        if (!state.World.Tiles.TryGetValue(tileId, out var tile))
+            return InvalidExpansion(ValidationReasonCode.TileNotFound, 0, 0, 0, TileStateKind.Locked);
+
+        var nextUnlockIndex = state.World.Tiles.Values.Count(t => t.Ownership == TileOwnership.Unlocked);
+        var tileDepth = ComputeTileDepth(state.World, tileId);
+        var cost = ComputeExpansionCost(tile.UnlockCost, tileDepth, nextUnlockIndex);
 
         if (tile.Ownership != TileOwnership.Unlockable)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Tile is not unlockable") });
+            return InvalidExpansion(ValidationReasonCode.TileNotUnlockable, cost, tileDepth, nextUnlockIndex, ToTileStateKind(state, tile));
 
         var hasUnlockedNeighbor = tile.AdjacentTileIds
             .Select(id => state.World.Tiles.TryGetValue(id, out var adjacent) ? adjacent : null)
             .Any(t => t is not null && t.Ownership == TileOwnership.Unlocked);
 
         if (!hasUnlockedNeighbor)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("No adjacent unlocked tile") });
+            return InvalidExpansion(ValidationReasonCode.NoAdjacentUnlockedTile, cost, tileDepth, nextUnlockIndex, ToTileStateKind(state, tile));
 
-        if (state.Economy.Coins < tile.UnlockCost)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Insufficient coins") });
+        if (state.Economy.Coins < cost)
+            return InvalidExpansion(ValidationReasonCode.InsufficientCoins, cost, tileDepth, nextUnlockIndex, ToTileStateKind(state, tile));
+
+        return new ExpansionValidationResult(true, ValidationReasonCode.None, ValidationMessage(ValidationReasonCode.None), cost, tileDepth, nextUnlockIndex, TileStateKind.Unlockable);
+    }
+
+    public static PlacementValidationResult ValidatePlacement(GameState state, string buildingTypeId, int tileId)
+    {
+        if (!BuildingDefinitions.TryGetValue(buildingTypeId, out var definition))
+            return InvalidPlacement(ValidationReasonCode.UnknownBuildingType, 0, TileStateKind.Locked);
+
+        if (definition.RequiredUnlockFlag is not null && !state.Progression.UnlockFlags.Contains(definition.RequiredUnlockFlag))
+            return InvalidPlacement(ValidationReasonCode.BuildingTypeNotUnlocked, definition.BaseCost, TileStateKind.Locked);
+
+        if (!state.World.Tiles.TryGetValue(tileId, out var tile))
+            return InvalidPlacement(ValidationReasonCode.TileNotFound, definition.BaseCost, TileStateKind.Locked);
+
+        var tileState = ToTileStateKind(state, tile, definition);
+        if (tile.Ownership != TileOwnership.Unlocked)
+            return InvalidPlacement(ValidationReasonCode.TileNotBuildable, definition.BaseCost, tileState);
+
+        if (tile.Terrain != definition.RequiredTerrain)
+            return InvalidPlacement(ValidationReasonCode.TerrainMismatch, definition.BaseCost, tileState);
+
+        var buildingsOnTile = state.Buildings.Values.Count(b => b.TileId == tileId);
+        if (buildingsOnTile >= tile.MaxBuildingSlots)
+            return InvalidPlacement(ValidationReasonCode.NoBuildingSlotsAvailable, definition.BaseCost, tileState);
+
+        if (state.Economy.Coins < definition.BaseCost)
+            return InvalidPlacement(ValidationReasonCode.InsufficientCoins, definition.BaseCost, tileState);
+
+        return new PlacementValidationResult(true, ValidationReasonCode.None, ValidationMessage(ValidationReasonCode.None), definition.BaseCost, TileStateKind.Buildable);
+    }
+
+    public static string ValidationMessage(ValidationReasonCode code)
+    {
+        return code switch
+        {
+            ValidationReasonCode.None => "Valid",
+            ValidationReasonCode.UnknownCommand => "Unknown command",
+            ValidationReasonCode.TileNotFound => "Tile not found",
+            ValidationReasonCode.TileNotUnlockable => "Tile is not unlockable",
+            ValidationReasonCode.NoAdjacentUnlockedTile => "No adjacent unlocked tile",
+            ValidationReasonCode.InsufficientCoins => "Insufficient coins",
+            ValidationReasonCode.UnknownBuildingType => "Unknown building type",
+            ValidationReasonCode.BuildingTypeNotUnlocked => "Building type not unlocked",
+            ValidationReasonCode.TileNotBuildable => "Tile is not buildable",
+            ValidationReasonCode.TerrainMismatch => "Terrain mismatch for building",
+            ValidationReasonCode.NoBuildingSlotsAvailable => "No building slots available",
+            ValidationReasonCode.BuildingNotFound => "Building not found",
+            ValidationReasonCode.BuildingAlreadyMaxLevel => "Building already max level",
+            _ => "Unknown validation error"
+        };
+    }
+
+    private static (GameState, List<IDomainEvent>) ApplyExpand(GameState state, ExpandTileCommand command)
+    {
+        var validation = ValidateExpansion(state, command.TileId);
+        if (!validation.IsValid)
+            return (state, new List<IDomainEvent> { Reject(validation.ReasonCode) });
 
         var mutableTiles = state.World.Tiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var tile = mutableTiles[command.TileId];
         mutableTiles[command.TileId] = tile with { Ownership = TileOwnership.Unlocked };
 
         foreach (var neighborId in tile.AdjacentTileIds)
@@ -53,36 +157,21 @@ public static class DeterministicSimulator
         var nextState = state with
         {
             World = new WorldState(mutableTiles),
-            Economy = state.Economy with { Coins = state.Economy.Coins - tile.UnlockCost }
+            Economy = state.Economy with { Coins = state.Economy.Coins - validation.Cost }
         };
 
         return (nextState, new List<IDomainEvent>
         {
-            new CurrencySpentEvent(tile.UnlockCost, nextState.Economy.Coins),
+            new CurrencySpentEvent(validation.Cost, nextState.Economy.Coins),
             new TileUnlockedEvent(command.TileId)
         });
     }
 
     private static (GameState, List<IDomainEvent>) ApplyPlaceBuilding(GameState state, PlaceBuildingCommand command)
     {
-        if (!BuildingDefinitions.TryGetValue(command.BuildingTypeId, out var definition))
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Unknown building type") });
-
-        if (definition.RequiredUnlockFlag is not null && !state.Progression.UnlockFlags.Contains(definition.RequiredUnlockFlag))
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Building type not unlocked") });
-
-        if (!state.World.Tiles.TryGetValue(command.TileId, out var tile) || tile.Ownership != TileOwnership.Unlocked)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Tile is not buildable") });
-
-        if (tile.Terrain != definition.RequiredTerrain)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Terrain mismatch for building") });
-
-        var buildingsOnTile = state.Buildings.Values.Count(b => b.TileId == command.TileId);
-        if (buildingsOnTile >= tile.MaxBuildingSlots)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("No building slots available") });
-
-        if (state.Economy.Coins < definition.BaseCost)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Insufficient coins") });
+        var validation = ValidatePlacement(state, command.BuildingTypeId, command.TileId);
+        if (!validation.IsValid)
+            return (state, new List<IDomainEvent> { Reject(validation.ReasonCode) });
 
         var nextBuildings = state.Buildings.ToDictionary(x => x.Key, x => x.Value);
         var buildingId = state.NextBuildingId;
@@ -92,12 +181,12 @@ public static class DeterministicSimulator
         {
             Buildings = nextBuildings,
             NextBuildingId = buildingId + 1,
-            Economy = state.Economy with { Coins = state.Economy.Coins - definition.BaseCost }
+            Economy = state.Economy with { Coins = state.Economy.Coins - validation.Cost }
         };
 
         return (nextState, new List<IDomainEvent>
         {
-            new CurrencySpentEvent(definition.BaseCost, nextState.Economy.Coins),
+            new CurrencySpentEvent(validation.Cost, nextState.Economy.Coins),
             new BuildingPlacedEvent(buildingId, command.BuildingTypeId, command.TileId)
         });
     }
@@ -105,17 +194,17 @@ public static class DeterministicSimulator
     private static (GameState, List<IDomainEvent>) ApplyUpgradeBuilding(GameState state, UpgradeBuildingCommand command)
     {
         if (!state.Buildings.TryGetValue(command.BuildingId, out var building))
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Building not found") });
+            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.BuildingNotFound) });
 
         if (!BuildingDefinitions.TryGetValue(building.BuildingTypeId, out var definition))
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Unknown building type") });
+            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.UnknownBuildingType) });
 
         if (building.Level >= definition.MaxLevel)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Building already max level") });
+            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.BuildingAlreadyMaxLevel) });
 
         var cost = definition.UpgradeCosts[building.Level - 1];
         if (state.Economy.Coins < cost)
-            return (state, new List<IDomainEvent> { new CommandRejectedEvent("Insufficient coins") });
+            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.InsufficientCoins) });
 
         var nextBuildings = state.Buildings.ToDictionary(x => x.Key, x => x.Value);
         var upgraded = building with { Level = building.Level + 1 };
@@ -224,6 +313,60 @@ public static class DeterministicSimulator
             .OrderBy(b => b.BuildingId)
             .Sum(b => BuildingDefinitions.TryGetValue(b.BuildingTypeId, out var def) ? def.BaseProductionPerTick * b.Level : 0);
     }
+
+    private static int ComputeExpansionCost(int baseUnlockCost, int tileDepth, int nextUnlockIndex)
+    {
+        var indexPremium = Math.Max(0, nextUnlockIndex - 2) * 4;
+        var depthPremium = Math.Max(0, tileDepth - 2) * 3;
+        return baseUnlockCost + indexPremium + depthPremium;
+    }
+
+    private static int ComputeTileDepth(WorldState world, int tileId)
+    {
+        if (tileId == 0) return 0;
+
+        var visited = new HashSet<int> { 0 };
+        var queue = new Queue<(int TileId, int Depth)>();
+        queue.Enqueue((0, 0));
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!world.Tiles.TryGetValue(current.TileId, out var tile))
+                continue;
+
+            foreach (var adjacent in tile.AdjacentTileIds.OrderBy(x => x))
+            {
+                if (!visited.Add(adjacent)) continue;
+                if (adjacent == tileId) return current.Depth + 1;
+                queue.Enqueue((adjacent, current.Depth + 1));
+            }
+        }
+
+        return 0;
+    }
+
+    private static TileStateKind ToTileStateKind(GameState state, TileState tile, BuildingDefinition? definition = null)
+    {
+        return tile.Ownership switch
+        {
+            TileOwnership.Locked => TileStateKind.Locked,
+            TileOwnership.Unlockable => TileStateKind.Unlockable,
+            TileOwnership.Unlocked when definition is null => TileStateKind.Unlocked,
+            TileOwnership.Unlocked when definition.RequiredTerrain != tile.Terrain => TileStateKind.Unlocked,
+            TileOwnership.Unlocked when state.Buildings.Values.Count(b => b.TileId == tile.TileId) >= tile.MaxBuildingSlots => TileStateKind.Unlocked,
+            TileOwnership.Unlocked => TileStateKind.Buildable,
+            _ => TileStateKind.Locked
+        };
+    }
+
+    private static CommandRejectedEvent Reject(ValidationReasonCode code) => new(code, ValidationMessage(code));
+
+    private static ExpansionValidationResult InvalidExpansion(ValidationReasonCode code, int cost, int depth, int nextUnlockIndex, TileStateKind tileState)
+        => new(false, code, ValidationMessage(code), cost, depth, nextUnlockIndex, tileState);
+
+    private static PlacementValidationResult InvalidPlacement(ValidationReasonCode code, int cost, TileStateKind tileState)
+        => new(false, code, ValidationMessage(code), cost, tileState);
 
     private sealed record BuildingDefinition(
         string BuildingTypeId,

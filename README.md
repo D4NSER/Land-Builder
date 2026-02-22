@@ -12,3 +12,4 @@ Structured project documentation is being developed in stages.
 - Stage 6 (MVP-2): Progression + Save/Load Reliability Build → `docs/stage6_mvp2_build.md`
 - Stage 6 (MVP-3): Usability + Stabilization Build → `docs/stage6_mvp3_build.md`
 - Stage 7: Production Polish & Hardening → `docs/stage7_production_polish_plan.md`
+- Stage 8A: Placement UX + Expansion Cost Scaling → `docs/stage8a_placement_and_expansion.md`

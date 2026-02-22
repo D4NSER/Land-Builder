@@ -8,6 +8,13 @@ namespace LandBuilder.Presentation;
 
 public partial class MainController : Control
 {
+    private enum BuildMode
+    {
+        None = 0,
+        Camp = 1,
+        Quarry = 2
+    }
+
     private sealed record HotkeyBinding(Key Key, bool CtrlRequired, Action Action, string HelpText);
 
     private readonly InMemoryEventSink _eventSink = new();
@@ -26,7 +33,17 @@ public partial class MainController : Control
     private Label _completionLabel = null!;
     private Label _messageLabel = null!;
     private Label _notificationsLabel = null!;
+    private Label _buildModeLabel = null!;
+    private Label _tileStatesLabel = null!;
+    private Label _tileActionHintLabel = null!;
     private Camera2D _camera = null!;
+
+    private Button _expandTile1Button = null!;
+    private Button _expandTile2Button = null!;
+    private Button _tile0ActionButton = null!;
+    private Button _tile2ActionButton = null!;
+
+    private BuildMode _buildMode = BuildMode.None;
 
     private long _lastAutosaveMsec;
     private const int AutosaveCooldownMsec = 750;
@@ -55,7 +72,15 @@ public partial class MainController : Control
         _completionLabel = GetNode<Label>("VBox/CompletionLabel");
         _messageLabel = GetNode<Label>("VBox/MessageLabel");
         _notificationsLabel = GetNode<Label>("VBox/NotificationsLabel");
+        _buildModeLabel = GetNode<Label>("VBox/BuildModeLabel");
+        _tileStatesLabel = GetNode<Label>("VBox/TileStatesLabel");
+        _tileActionHintLabel = GetNode<Label>("VBox/TileActionHintLabel");
         _camera = GetNode<Camera2D>("GameCamera");
+
+        _expandTile1Button = GetNode<Button>("VBox/Buttons/ExpandTile1");
+        _expandTile2Button = GetNode<Button>("VBox/Buttons/ExpandTile2");
+        _tile0ActionButton = GetNode<Button>("VBox/Buttons/Tile0Action");
+        _tile2ActionButton = GetNode<Button>("VBox/Buttons/Tile2Action");
 
         BindButtons();
         ConfigureHotkeys();
@@ -78,7 +103,7 @@ public partial class MainController : Control
 
         if (key.Keycode == Key.Escape)
         {
-            RenderProjection("Cancelled current action");
+            CancelBuildMode();
             return;
         }
 
@@ -106,8 +131,10 @@ public partial class MainController : Control
 
         _hotkeys.Add(new HotkeyBinding(Key.Key1, false, () => IssueCommand(new ExpandTileCommand(1)), "1: Expand Tile 1"));
         _hotkeys.Add(new HotkeyBinding(Key.Key2, false, () => IssueCommand(new ExpandTileCommand(2)), "2: Expand Tile 2"));
-        _hotkeys.Add(new HotkeyBinding(Key.C, false, () => IssueCommand(new PlaceBuildingCommand("Camp", 0)), "C: Place Camp"));
-        _hotkeys.Add(new HotkeyBinding(Key.Q, false, () => IssueCommand(new PlaceBuildingCommand("Quarry", 2)), "Q: Place Quarry"));
+        _hotkeys.Add(new HotkeyBinding(Key.C, false, () => EnterBuildMode(BuildMode.Camp), "C: Camp Build Mode"));
+        _hotkeys.Add(new HotkeyBinding(Key.Q, false, () => EnterBuildMode(BuildMode.Quarry), "Q: Quarry Build Mode"));
+        _hotkeys.Add(new HotkeyBinding(Key.T, false, () => AttemptBuildOnTile(0), "T: Build on Tile 0"));
+        _hotkeys.Add(new HotkeyBinding(Key.Y, false, () => AttemptBuildOnTile(2), "Y: Build on Tile 2"));
         _hotkeys.Add(new HotkeyBinding(Key.U, false, () => IssueCommand(new UpgradeBuildingCommand(1)), "U: Upgrade Building 1"));
         _hotkeys.Add(new HotkeyBinding(Key.S, true, SaveState, "Ctrl+S: Save"));
         _hotkeys.Add(new HotkeyBinding(Key.L, true, LoadState, "Ctrl+L: Load"));
@@ -122,7 +149,7 @@ public partial class MainController : Control
         _hotkeysLabel.Text =
             "Hotkeys: " +
             string.Join(" | ", _hotkeys.Select(h => h.HelpText)) +
-            " | Esc: Cancel | WASD/Arrows: Pan | +/-: Zoom";
+            " | Esc: Cancel Build Mode | WASD/Arrows: Pan | +/-: Zoom";
     }
 
     private void HandleCameraPan(float delta)
@@ -141,13 +168,53 @@ public partial class MainController : Control
 
     private void BindButtons()
     {
-        GetNode<Button>("VBox/Buttons/ExpandTile1").Pressed += () => IssueCommand(new ExpandTileCommand(1));
-        GetNode<Button>("VBox/Buttons/ExpandTile2").Pressed += () => IssueCommand(new ExpandTileCommand(2));
-        GetNode<Button>("VBox/Buttons/PlaceCampTile0").Pressed += () => IssueCommand(new PlaceBuildingCommand("Camp", 0));
-        GetNode<Button>("VBox/Buttons/PlaceQuarryTile2").Pressed += () => IssueCommand(new PlaceBuildingCommand("Quarry", 2));
+        _expandTile1Button.Pressed += () => IssueCommand(new ExpandTileCommand(1));
+        _expandTile2Button.Pressed += () => IssueCommand(new ExpandTileCommand(2));
+        GetNode<Button>("VBox/Buttons/EnterCampBuildMode").Pressed += () => EnterBuildMode(BuildMode.Camp);
+        GetNode<Button>("VBox/Buttons/EnterQuarryBuildMode").Pressed += () => EnterBuildMode(BuildMode.Quarry);
+        GetNode<Button>("VBox/Buttons/CancelBuildMode").Pressed += CancelBuildMode;
+        _tile0ActionButton.Pressed += () => AttemptBuildOnTile(0);
+        _tile2ActionButton.Pressed += () => AttemptBuildOnTile(2);
         GetNode<Button>("VBox/Buttons/UpgradeBuilding1").Pressed += () => IssueCommand(new UpgradeBuildingCommand(1));
         GetNode<Button>("VBox/Buttons/SaveButton").Pressed += SaveState;
         GetNode<Button>("VBox/Buttons/LoadButton").Pressed += LoadState;
+    }
+
+    private void EnterBuildMode(BuildMode mode)
+    {
+        _buildMode = mode;
+        RenderProjection($"{mode} build mode active. Choose tile action button (T/Y).");
+    }
+
+    private void CancelBuildMode()
+    {
+        if (_buildMode == BuildMode.None)
+        {
+            RenderProjection("No build mode active.");
+            return;
+        }
+
+        _buildMode = BuildMode.None;
+        RenderProjection("Build mode cancelled.");
+    }
+
+    private void AttemptBuildOnTile(int tileId)
+    {
+        if (_buildMode == BuildMode.None)
+        {
+            RenderProjection("Enter build mode first (C or Q).");
+            return;
+        }
+
+        var buildingType = _buildMode == BuildMode.Camp ? "Camp" : "Quarry";
+        var validation = DeterministicSimulator.ValidatePlacement(_session.State, buildingType, tileId);
+        if (!validation.IsValid)
+        {
+            RenderProjection($"Build blocked ({validation.ReasonCode}): {validation.Message}");
+            return;
+        }
+
+        IssueCommand(new PlaceBuildingCommand(buildingType, tileId));
     }
 
     private void IssueCommand(IGameCommand command)
@@ -186,6 +253,7 @@ public partial class MainController : Control
 
         _session = new GameSession(result.State, _eventSink);
         _scheduler = new DeterministicTickScheduler(_session, ticksPerSecond: 10);
+        _buildMode = BuildMode.None;
 
         RenderProjection(result.StatusMessage);
         PushNotification(result.StatusMessage);
@@ -201,11 +269,55 @@ public partial class MainController : Control
         _completionLabel.Text = $"Last Completion: {projection.LastCompletionMessage}";
         _messageLabel.Text = overrideMessage ?? projection.LastEventMessage;
 
+        _buildModeLabel.Text = $"Build Mode: {_buildMode}";
+        _tileActionHintLabel.Text = _buildMode == BuildMode.None
+            ? "Tile Actions: Enter build mode to place buildings."
+            : $"Tile Actions: placing {_buildMode} (Esc to cancel).";
+
+        var tileSummaries = projection.TileStates
+            .Select(t => $"Tile {t.TileId}: {t.State} | Expand {t.ExpansionPreviewCost} ({(t.CanExpand ? "valid" : t.ExpansionReasonCode.ToString())})")
+            .ToArray();
+        _tileStatesLabel.Text = "Tile States:\n" + string.Join("\n", tileSummaries);
+
+        UpdateTileButtons(projection);
+
         var messageForFeed = overrideMessage ?? projection.LastEventMessage;
         if (!string.IsNullOrWhiteSpace(messageForFeed) && messageForFeed != "Ready")
             PushNotification(messageForFeed);
 
         _eventSink.Clear();
+    }
+
+    private void UpdateTileButtons(UiProjection projection)
+    {
+        var tile1 = projection.TileStates.First(t => t.TileId == 1);
+        var tile2 = projection.TileStates.First(t => t.TileId == 2);
+
+        _expandTile1Button.Text = $"Expand Tile 1 ({tile1.ExpansionPreviewCost} coins)";
+        _expandTile2Button.Text = $"Expand Tile 2 ({tile2.ExpansionPreviewCost} coins)";
+
+        var mode = _buildMode == BuildMode.Camp ? "Camp" : "Quarry";
+        var tile0 = projection.TileStates.First(t => t.TileId == 0);
+        var tile2Build = projection.TileStates.First(t => t.TileId == 2);
+
+        if (_buildMode == BuildMode.None)
+        {
+            _tile0ActionButton.Text = "Tile 0 Action (build mode required)";
+            _tile2ActionButton.Text = "Tile 2 Action (build mode required)";
+            _tile0ActionButton.Disabled = true;
+            _tile2ActionButton.Disabled = true;
+            return;
+        }
+
+        var tile0Valid = _buildMode == BuildMode.Camp ? tile0.CanPlaceCamp : tile0.CanPlaceQuarry;
+        var tile2Valid = _buildMode == BuildMode.Camp ? tile2Build.CanPlaceCamp : tile2Build.CanPlaceQuarry;
+        var tile0Reason = _buildMode == BuildMode.Camp ? tile0.CampReasonCode : tile0.QuarryReasonCode;
+        var tile2Reason = _buildMode == BuildMode.Camp ? tile2Build.CampReasonCode : tile2Build.QuarryReasonCode;
+
+        _tile0ActionButton.Text = $"{(tile0Valid ? "[VALID]" : "[INVALID]")} {mode} on Tile 0 ({(tile0Valid ? "OK" : tile0Reason)})";
+        _tile2ActionButton.Text = $"{(tile2Valid ? "[VALID]" : "[INVALID]")} {mode} on Tile 2 ({(tile2Valid ? "OK" : tile2Reason)})";
+        _tile0ActionButton.Disabled = false;
+        _tile2ActionButton.Disabled = false;
     }
 
     private void PushNotification(string text)
