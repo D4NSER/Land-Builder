@@ -1,0 +1,13 @@
+{
+  "SchemaVersion": 2,
+  "Coins": 42,
+  "NextBuildingId": 2,
+  "Tiles": [
+    { "TileId": 0, "Ownership": 2, "UnlockCost": 0, "AdjacentTileIds": [1], "MaxBuildingSlots": 1 },
+    { "TileId": 1, "Ownership": 2, "UnlockCost": 10, "AdjacentTileIds": [0,2], "MaxBuildingSlots": 1 },
+    { "TileId": 2, "Ownership": 1, "UnlockCost": 20, "AdjacentTileIds": [1], "MaxBuildingSlots": 1 }
+  ],
+  "Buildings": [
+    { "BuildingId": 1, "BuildingTypeId": "Camp", "TileId": 0, "Level": 2 }
+  ]
+}

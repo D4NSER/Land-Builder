@@ -9,3 +9,4 @@ Structured project documentation is being developed in stages.
 - Stage 5: Implementation Roadmap → `docs/stage5_implementation_roadmap.md`
 - Stage 6 (MVP-0): Step-by-Step Build Guidance → `docs/stage6_mvp0_vertical_slice.md`
 - Stage 6 (MVP-1): Core Playable Loop Build → `docs/stage6_mvp1_build.md`
+- Stage 6 (MVP-2): Progression + Save/Load Reliability Build → `docs/stage6_mvp2_build.md`

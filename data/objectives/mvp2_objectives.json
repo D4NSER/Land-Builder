@@ -1,0 +1,46 @@
+{
+  "objectives": [
+    {
+      "objectiveId": "OBJ_01_UNLOCK_FIRST_TILE",
+      "type": "UnlockTileCount",
+      "targetValue": 1,
+      "rewardCoins": 5,
+      "rewardUnlockFlag": "UNLOCK_CAMP"
+    },
+    {
+      "objectiveId": "OBJ_02_PLACE_FIRST_CAMP",
+      "type": "PlaceBuildingTypeCount",
+      "targetValue": 1,
+      "buildingTypeId": "Camp",
+      "rewardCoins": 5
+    },
+    {
+      "objectiveId": "OBJ_03_EARN_COINS",
+      "type": "LifetimeCoinsEarned",
+      "targetValue": 20,
+      "rewardCoins": 8
+    },
+    {
+      "objectiveId": "OBJ_04_UPGRADE_CAMP_L2",
+      "type": "UpgradeBuildingToLevelAtLeast",
+      "targetValue": 2,
+      "buildingTypeId": "Camp",
+      "rewardCoins": 5,
+      "rewardUnlockFlag": "UNLOCK_QUARRY"
+    },
+    {
+      "objectiveId": "OBJ_05_PLACE_QUARRY_ON_ROCKY",
+      "type": "PlaceBuildingTypeOnTile",
+      "targetValue": 1,
+      "buildingTypeId": "Quarry",
+      "tileId": 2,
+      "rewardCoins": 10
+    },
+    {
+      "objectiveId": "OBJ_06_REACH_PRODUCTION_THRESHOLD",
+      "type": "ProductionPerTickAtLeast",
+      "targetValue": 4,
+      "rewardCoins": 15
+    }
+  ]
+}
