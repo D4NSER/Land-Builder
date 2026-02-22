@@ -98,3 +98,15 @@ MVP-2 is complete when:
 6. UI only sends commands and displays projected objective/progress/completion state.
 
 **Stop condition:** this change stops at MVP-2 and does not include MVP-3/Stage 7 work.
+
+
+## Build & Test (Repository Hygiene Update)
+
+- Solution file: `LandBuilder.sln`
+- Build: `dotnet build .\LandBuilder.sln`
+- List tests: `dotnet test .\LandBuilder.sln --list-tests`
+- Run tests: `dotnet test .\LandBuilder.sln`
+
+Notes:
+- Production C# code is compiled from `src/LandBuilder.Core/` only.
+- Tests run from `tests/LandBuilder.Tests/` and load objective/fixture files via copied content paths.

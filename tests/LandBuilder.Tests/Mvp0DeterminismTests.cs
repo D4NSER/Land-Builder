@@ -1,6 +1,5 @@
-using System;
-using System.Collections.Generic;
 using LandBuilder.Domain;
+using LandBuilder.Infrastructure.Content;
 using Xunit;
 
 namespace LandBuilder.Tests;
@@ -12,21 +11,29 @@ public class Mvp0DeterminismTests
     {
         var commands = new IGameCommand[]
         {
-            new TickCommand(1),
             new ExpandTileCommand(1),
-            new TickCommand(3)
+            new PlaceBuildingCommand("Camp", 0),
+            new TickCommand(5),
+            new UpgradeBuildingCommand(1),
+            new TickCommand(3),
+            new ExpandTileCommand(2),
+            new PlaceBuildingCommand("Quarry", 2),
+            new TickCommand(2)
         };
 
         var a = Replay(commands);
         var b = Replay(commands);
 
-        Assert.Equal(a.Economy.Coins, b.Economy.Coins);
-        Assert.Equal(a.World.Tiles[1].Ownership, b.World.Tiles[1].Ownership);
+        Assert.Equal(b.Economy.Coins, a.Economy.Coins);
+        Assert.Equal(b.Progression.CurrentObjectiveIndex, a.Progression.CurrentObjectiveIndex);
+        Assert.Equal(b.Buildings.Count, a.Buildings.Count);
+        Assert.Equal(b.Buildings[1].Level, a.Buildings[1].Level);
     }
 
     private static GameState Replay(IEnumerable<IGameCommand> commands)
     {
-        var state = GameState.CreateMvp0Default();
+        var objectives = new ObjectiveDefinitionLoader().Load(TestPaths.ObjectivesJson);
+        var state = GameState.CreateInitial(objectives);
         foreach (var command in commands)
         {
             state = DeterministicSimulator.Apply(state, command).State;

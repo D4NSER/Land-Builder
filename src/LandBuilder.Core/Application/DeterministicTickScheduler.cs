@@ -14,14 +14,18 @@ public sealed class DeterministicTickScheduler
         _tickDurationSeconds = 1.0 / ticksPerSecond;
     }
 
-    public void Advance(double deltaSeconds)
+    public int Advance(double deltaSeconds)
     {
         _accumulator += deltaSeconds;
+        var processedTicks = 0;
 
         while (_accumulator >= _tickDurationSeconds)
         {
             _session.Dispatch(new TickCommand(1));
             _accumulator -= _tickDurationSeconds;
+            processedTicks++;
         }
+
+        return processedTicks;
     }
 }
