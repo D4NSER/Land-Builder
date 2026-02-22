@@ -1,10 +1,14 @@
+using System;
+using System.Collections.Generic;
 using LandBuilder.Domain;
+using Xunit;
 
 namespace LandBuilder.Tests;
 
-public static class Mvp0DeterminismTests
+public class Mvp0DeterminismTests
 {
-    public static void SameInputsProduceSameOutputs()
+    [Fact]
+    public void SameInputsProduceSameOutputs()
     {
         var commands = new IGameCommand[]
         {
@@ -16,8 +20,8 @@ public static class Mvp0DeterminismTests
         var a = Replay(commands);
         var b = Replay(commands);
 
-        if (a.Economy.Coins != b.Economy.Coins) throw new Exception("Coins diverged");
-        if (a.World.Tiles[1].Ownership != b.World.Tiles[1].Ownership) throw new Exception("Tile state diverged");
+        Assert.Equal(a.Economy.Coins, b.Economy.Coins);
+        Assert.Equal(a.World.Tiles[1].Ownership, b.World.Tiles[1].Ownership);
     }
 
     private static GameState Replay(IEnumerable<IGameCommand> commands)
