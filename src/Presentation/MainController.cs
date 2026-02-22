@@ -9,8 +9,9 @@ namespace LandBuilder.Presentation;
 public partial class MainController : Control
 {
     private readonly InMemoryEventSink _eventSink = new();
-    private SaveRepository _saveRepository = null!;
+    private readonly Queue<string> _recentNotifications = new();
 
+    private SaveRepository _saveRepository = null!;
     private GameSession _session = null!;
     private DeterministicTickScheduler _scheduler = null!;
 
@@ -20,6 +21,13 @@ public partial class MainController : Control
     private Label _objectiveProgressLabel = null!;
     private Label _completionLabel = null!;
     private Label _messageLabel = null!;
+    private Label _notificationsLabel = null!;
+    private Camera2D _camera = null!;
+
+    private long _lastAutosaveMsec;
+    private const int AutosaveCooldownMsec = 750;
+    private const float CameraPanSpeed = 500f;
+    private const float CameraZoomStep = 0.1f;
 
     public override void _Ready()
     {
@@ -36,6 +44,8 @@ public partial class MainController : Control
         _objectiveProgressLabel = GetNode<Label>("VBox/ObjectiveProgressLabel");
         _completionLabel = GetNode<Label>("VBox/CompletionLabel");
         _messageLabel = GetNode<Label>("VBox/MessageLabel");
+        _notificationsLabel = GetNode<Label>("VBox/NotificationsLabel");
+        _camera = GetNode<Camera2D>("GameCamera");
 
         BindButtons();
         RenderProjection();
@@ -48,6 +58,73 @@ public partial class MainController : Control
         {
             RenderProjection();
         }
+
+        HandleCameraPan((float)delta);
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is not InputEventKey key || !key.Pressed || key.Echo)
+            return;
+
+        if (key.Keycode == Key.Escape)
+        {
+            RenderProjection("Cancelled current action");
+            return;
+        }
+
+        if (key.Keycode == Key.Equal || key.Keycode == Key.KpAdd)
+        {
+            _camera.Zoom = (_camera.Zoom - new Vector2(CameraZoomStep, CameraZoomStep)).Max(new Vector2(0.5f, 0.5f));
+            PushNotification($"Camera zoom: {_camera.Zoom.X:0.00}");
+            return;
+        }
+
+        if (key.Keycode == Key.Minus || key.Keycode == Key.KpSubtract)
+        {
+            _camera.Zoom = (_camera.Zoom + new Vector2(CameraZoomStep, CameraZoomStep)).Min(new Vector2(2.0f, 2.0f));
+            PushNotification($"Camera zoom: {_camera.Zoom.X:0.00}");
+            return;
+        }
+
+        switch (key.Keycode)
+        {
+            case Key.Key1:
+                IssueCommand(new ExpandTileCommand(1));
+                break;
+            case Key.Key2:
+                IssueCommand(new ExpandTileCommand(2));
+                break;
+            case Key.C:
+                IssueCommand(new PlaceBuildingCommand("Camp", 0));
+                break;
+            case Key.Q:
+                IssueCommand(new PlaceBuildingCommand("Quarry", 2));
+                break;
+            case Key.U:
+                IssueCommand(new UpgradeBuildingCommand(1));
+                break;
+            case Key.S when key.CtrlPressed:
+                SaveState();
+                break;
+            case Key.L when key.CtrlPressed:
+                LoadState();
+                break;
+        }
+    }
+
+    private void HandleCameraPan(float delta)
+    {
+        var direction = Vector2.Zero;
+
+        if (Input.IsKeyPressed(Key.Left) || Input.IsKeyPressed(Key.A)) direction.X -= 1;
+        if (Input.IsKeyPressed(Key.Right) || Input.IsKeyPressed(Key.D)) direction.X += 1;
+        if (Input.IsKeyPressed(Key.Up) || Input.IsKeyPressed(Key.W)) direction.Y -= 1;
+        if (Input.IsKeyPressed(Key.Down) || Input.IsKeyPressed(Key.S)) direction.Y += 1;
+
+        if (direction == Vector2.Zero) return;
+
+        _camera.Position += direction.Normalized() * CameraPanSpeed * delta;
     }
 
     private void BindButtons()
@@ -64,13 +141,22 @@ public partial class MainController : Control
     private void IssueCommand(IGameCommand command)
     {
         _session.Dispatch(command);
-
-        if (_eventSink.Events.Any(e => e is ObjectiveCompletedEvent or TileUnlockedEvent or BuildingPlacedEvent or BuildingUpgradedEvent))
-        {
-            _saveRepository.Save("user://mvp2_autosave.json", _session.State);
-        }
-
+        AutosaveOnKeyEvents();
         RenderProjection();
+    }
+
+    private void AutosaveOnKeyEvents()
+    {
+        if (!_eventSink.Events.Any(e => e is ObjectiveCompletedEvent or TileUnlockedEvent or BuildingPlacedEvent or BuildingUpgradedEvent))
+            return;
+
+        var now = Time.GetTicksMsec();
+        if (now - _lastAutosaveMsec < AutosaveCooldownMsec)
+            return;
+
+        _saveRepository.Save("user://mvp2_autosave.json", _session.State);
+        _lastAutosaveMsec = now;
+        PushNotification("Autosave complete");
     }
 
     private void SaveState()
@@ -96,6 +182,20 @@ public partial class MainController : Control
         _objectiveProgressLabel.Text = $"Progress: {projection.ObjectiveProgress}";
         _completionLabel.Text = $"Last Completion: {projection.LastCompletionMessage}";
         _messageLabel.Text = overrideMessage ?? projection.LastEventMessage;
+
+        var messageForFeed = overrideMessage ?? projection.LastEventMessage;
+        if (!string.IsNullOrWhiteSpace(messageForFeed) && messageForFeed != "Ready")
+            PushNotification(messageForFeed);
+
         _eventSink.Clear();
+    }
+
+    private void PushNotification(string text)
+    {
+        _recentNotifications.Enqueue(text);
+        while (_recentNotifications.Count > 5)
+            _recentNotifications.Dequeue();
+
+        _notificationsLabel.Text = "Notifications:\n" + string.Join("\n", _recentNotifications);
     }
 }
