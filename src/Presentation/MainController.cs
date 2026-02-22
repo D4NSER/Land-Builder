@@ -8,13 +8,17 @@ namespace LandBuilder.Presentation;
 
 public partial class MainController : Control
 {
+    private sealed record HotkeyBinding(Key Key, bool CtrlRequired, Action Action, string HelpText);
+
     private readonly InMemoryEventSink _eventSink = new();
     private readonly Queue<string> _recentNotifications = new();
+    private readonly List<HotkeyBinding> _hotkeys = new();
 
     private SaveRepository _saveRepository = null!;
     private GameSession _session = null!;
     private DeterministicTickScheduler _scheduler = null!;
 
+    private Label _hotkeysLabel = null!;
     private Label _coinsLabel = null!;
     private Label _statsLabel = null!;
     private Label _objectiveLabel = null!;
@@ -29,6 +33,11 @@ public partial class MainController : Control
     private const float CameraPanSpeed = 500f;
     private const float CameraZoomStep = 0.1f;
 
+    private const string PrimarySavePath = "user://mvp2_save.json";
+    private const string BackupSavePath = "user://mvp2_save.backup.json";
+    private const string AutosavePath = "user://mvp2_autosave.json";
+    private const string AutosaveBackupPath = "user://mvp2_autosave.backup.json";
+
     public override void _Ready()
     {
         var objectivePath = ProjectSettings.GlobalizePath("res://data/objectives/mvp2_objectives.json");
@@ -38,6 +47,7 @@ public partial class MainController : Control
         _session = new GameSession(GameState.CreateInitial(objectiveDefinitions), _eventSink);
         _scheduler = new DeterministicTickScheduler(_session, ticksPerSecond: 10);
 
+        _hotkeysLabel = GetNode<Label>("VBox/HotkeysLabel");
         _coinsLabel = GetNode<Label>("VBox/CoinsLabel");
         _statsLabel = GetNode<Label>("VBox/StatsLabel");
         _objectiveLabel = GetNode<Label>("VBox/ObjectiveLabel");
@@ -48,6 +58,7 @@ public partial class MainController : Control
         _camera = GetNode<Camera2D>("GameCamera");
 
         BindButtons();
+        ConfigureHotkeys();
         RenderProjection();
     }
 
@@ -55,9 +66,7 @@ public partial class MainController : Control
     {
         var ticks = _scheduler.Advance(delta);
         if (ticks > 0)
-        {
             RenderProjection();
-        }
 
         HandleCameraPan((float)delta);
     }
@@ -87,30 +96,33 @@ public partial class MainController : Control
             return;
         }
 
-        switch (key.Keycode)
-        {
-            case Key.Key1:
-                IssueCommand(new ExpandTileCommand(1));
-                break;
-            case Key.Key2:
-                IssueCommand(new ExpandTileCommand(2));
-                break;
-            case Key.C:
-                IssueCommand(new PlaceBuildingCommand("Camp", 0));
-                break;
-            case Key.Q:
-                IssueCommand(new PlaceBuildingCommand("Quarry", 2));
-                break;
-            case Key.U:
-                IssueCommand(new UpgradeBuildingCommand(1));
-                break;
-            case Key.S when key.CtrlPressed:
-                SaveState();
-                break;
-            case Key.L when key.CtrlPressed:
-                LoadState();
-                break;
-        }
+        var binding = _hotkeys.FirstOrDefault(x => x.Key == key.Keycode && x.CtrlRequired == key.CtrlPressed);
+        binding?.Action.Invoke();
+    }
+
+    private void ConfigureHotkeys()
+    {
+        _hotkeys.Clear();
+
+        _hotkeys.Add(new HotkeyBinding(Key.Key1, false, () => IssueCommand(new ExpandTileCommand(1)), "1: Expand Tile 1"));
+        _hotkeys.Add(new HotkeyBinding(Key.Key2, false, () => IssueCommand(new ExpandTileCommand(2)), "2: Expand Tile 2"));
+        _hotkeys.Add(new HotkeyBinding(Key.C, false, () => IssueCommand(new PlaceBuildingCommand("Camp", 0)), "C: Place Camp"));
+        _hotkeys.Add(new HotkeyBinding(Key.Q, false, () => IssueCommand(new PlaceBuildingCommand("Quarry", 2)), "Q: Place Quarry"));
+        _hotkeys.Add(new HotkeyBinding(Key.U, false, () => IssueCommand(new UpgradeBuildingCommand(1)), "U: Upgrade Building 1"));
+        _hotkeys.Add(new HotkeyBinding(Key.S, true, SaveState, "Ctrl+S: Save"));
+        _hotkeys.Add(new HotkeyBinding(Key.L, true, LoadState, "Ctrl+L: Load"));
+
+        var duplicate = _hotkeys
+            .GroupBy(x => (x.Key, x.CtrlRequired))
+            .FirstOrDefault(g => g.Count() > 1);
+
+        if (duplicate is not null)
+            throw new InvalidOperationException($"Conflicting hotkey binding detected for {duplicate.Key.Key} (CtrlRequired={duplicate.Key.CtrlRequired}).");
+
+        _hotkeysLabel.Text =
+            "Hotkeys: " +
+            string.Join(" | ", _hotkeys.Select(h => h.HelpText)) +
+            " | Esc: Cancel | WASD/Arrows: Pan | +/-: Zoom";
     }
 
     private void HandleCameraPan(float delta)
@@ -154,23 +166,29 @@ public partial class MainController : Control
         if (now - _lastAutosaveMsec < AutosaveCooldownMsec)
             return;
 
-        _saveRepository.Save("user://mvp2_autosave.json", _session.State);
+        _saveRepository.Save(AutosavePath, _session.State, AutosaveBackupPath);
         _lastAutosaveMsec = now;
         PushNotification("Autosave complete");
     }
 
     private void SaveState()
     {
-        _saveRepository.Save("user://mvp2_save.json", _session.State);
-        RenderProjection("Saved to user://mvp2_save.json");
+        _saveRepository.Save(PrimarySavePath, _session.State, BackupSavePath);
+        RenderProjection($"Saved to {PrimarySavePath}");
     }
 
     private void LoadState()
     {
-        var loaded = _saveRepository.Load("user://mvp2_save.json");
-        _session = new GameSession(loaded, _eventSink);
+        var result = _saveRepository.LoadWithRecovery(
+            PrimarySavePath,
+            BackupSavePath,
+            () => GameState.CreateInitial(_session.State.ObjectiveDefinitions));
+
+        _session = new GameSession(result.State, _eventSink);
         _scheduler = new DeterministicTickScheduler(_session, ticksPerSecond: 10);
-        RenderProjection("Loaded from user://mvp2_save.json");
+
+        RenderProjection(result.StatusMessage);
+        PushNotification(result.StatusMessage);
     }
 
     private void RenderProjection(string? overrideMessage = null)

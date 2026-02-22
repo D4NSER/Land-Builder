@@ -17,8 +17,8 @@ public class Mvp3SaveLoadStabilityTests
         var state = GameState.CreateInitial(objectives);
         var repo = new SaveRepository(objectives);
         var savePath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp3_stability_save.json");
+        var backupPath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp3_stability_save.backup.json");
 
-        // Establish a non-trivial baseline state.
         state = DeterministicSimulator.Apply(state, new ExpandTileCommand(1)).State;
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0)).State;
         state = DeterministicSimulator.Apply(state, new TickCommand(20)).State;
@@ -31,7 +31,7 @@ public class Mvp3SaveLoadStabilityTests
             state = DeterministicSimulator.Apply(state, new TickCommand(5)).State;
             var beforeHash = ComputeStateHash(state);
 
-            repo.Save(savePath, state);
+            repo.Save(savePath, state, backupPath);
             var loaded = repo.Load(savePath);
             var afterHash = ComputeStateHash(loaded);
 
@@ -40,6 +40,62 @@ public class Mvp3SaveLoadStabilityTests
         }
 
         File.Delete(savePath);
+        File.Delete(backupPath);
+    }
+
+    [Fact]
+    public void LoadWithRecovery_UsesBackupWhenPrimaryIsCorrupt()
+    {
+        var objectives = new ObjectiveDefinitionLoader().Load(TestPaths.ObjectivesJson);
+        var state = GameState.CreateInitial(objectives);
+        var repo = new SaveRepository(objectives);
+
+        var primaryPath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp3_primary_corrupt.json");
+        var backupPath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp3_backup_valid.json");
+
+        state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0)).State;
+        repo.Save(backupPath, state, null);
+        File.WriteAllText(primaryPath, "{ definitely-not-json }");
+
+        var recovered = repo.LoadWithRecovery(primaryPath, backupPath, () => GameState.CreateInitial(objectives));
+
+        Assert.Equal("Primary save was invalid. Loaded backup save.", recovered.StatusMessage);
+        Assert.Equal(state.Economy.Coins, recovered.State.Economy.Coins);
+
+        File.Delete(primaryPath);
+        File.Delete(backupPath);
+    }
+
+    [Fact]
+    public void LoadWithRecovery_UsesSafeDefaultWhenPrimaryAndBackupInvalid()
+    {
+        var objectives = new ObjectiveDefinitionLoader().Load(TestPaths.ObjectivesJson);
+        var repo = new SaveRepository(objectives);
+
+        var primaryPath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp3_primary_invalid.json");
+        var backupPath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp3_backup_invalid.json");
+
+        File.WriteAllText(primaryPath, "bad");
+        File.WriteAllText(backupPath, "also bad");
+
+        var recovered = repo.LoadWithRecovery(primaryPath, backupPath, () => GameState.CreateInitial(objectives));
+
+        Assert.Equal("Primary and backup saves were unavailable. Started a safe default session.", recovered.StatusMessage);
+        Assert.Equal(0, recovered.State.Progression.CurrentObjectiveIndex);
+
+        File.Delete(primaryPath);
+        File.Delete(backupPath);
+    }
+
+    [Fact]
+    public void ObjectiveLoader_ErrorMessage_IsActionableOnMissingFile()
+    {
+        var loader = new ObjectiveDefinitionLoader();
+        var missingPath = Path.Combine(Path.GetTempPath(), "does_not_exist_objectives.json");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => loader.Load(missingPath));
+        Assert.Contains("Objective file not found", ex.Message);
+        Assert.Contains("mvp2_objectives.json", ex.Message);
     }
 
     private static string ComputeStateHash(GameState state)

@@ -13,7 +13,7 @@ public sealed class SaveRepository
         _objectiveDefinitions = objectiveDefinitions;
     }
 
-    public void Save(string path, GameState state)
+    public void Save(string path, GameState state, string? backupPath = null)
     {
         var payload = new SavePayload
         {
@@ -45,21 +45,78 @@ public sealed class SaveRepository
         };
 
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(path, json);
+
+        try
+        {
+            WriteAtomic(path, json);
+            if (!string.IsNullOrWhiteSpace(backupPath))
+            {
+                WriteAtomic(backupPath!, json);
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Save failed. Verify write permissions for '{path}'.", ex);
+        }
     }
 
     public GameState Load(string path)
     {
-        var json = File.ReadAllText(path);
-        var payload = JsonSerializer.Deserialize<SavePayload>(json)
-                      ?? throw new InvalidOperationException("Save file invalid");
-
-        return payload.SchemaVersion switch
+        try
         {
-            2 => MigrateV2ToV3(payload),
-            CurrentSchemaVersion => BuildV3(payload),
-            _ => throw new InvalidOperationException($"Unsupported schema version: {payload.SchemaVersion}")
-        };
+            var json = File.ReadAllText(path);
+            var payload = JsonSerializer.Deserialize<SavePayload>(json)
+                          ?? throw new InvalidOperationException("Save file is invalid JSON payload.");
+
+            return payload.SchemaVersion switch
+            {
+                2 => MigrateV2ToV3(payload),
+                CurrentSchemaVersion => BuildV3(payload),
+                _ => throw new InvalidOperationException($"Unsupported save schema version: {payload.SchemaVersion}. Expected 2 or {CurrentSchemaVersion}.")
+            };
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException)
+        {
+            throw new InvalidOperationException($"Failed to load save '{path}'. File may be missing or corrupted.", ex);
+        }
+    }
+
+    public (GameState State, string StatusMessage) LoadWithRecovery(string primaryPath, string backupPath, Func<GameState> safeDefaultFactory)
+    {
+        try
+        {
+            return (Load(primaryPath), "Loaded primary save.");
+        }
+        catch (Exception primaryEx)
+        {
+            Console.Error.WriteLine(primaryEx.Message);
+            try
+            {
+                return (Load(backupPath), "Primary save was invalid. Loaded backup save.");
+            }
+            catch (Exception backupEx)
+            {
+                Console.Error.WriteLine(backupEx.Message);
+                return (safeDefaultFactory(), "Primary and backup saves were unavailable. Started a safe default session.");
+            }
+        }
+    }
+
+    private static void WriteAtomic(string path, string contents)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var tempPath = path + ".tmp";
+        File.WriteAllText(tempPath, contents);
+
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+
+        File.Move(tempPath, path);
     }
 
     private GameState MigrateV2ToV3(SavePayload payload)
