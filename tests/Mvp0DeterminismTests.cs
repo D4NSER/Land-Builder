@@ -1,11 +1,13 @@
 using LandBuilder.Domain;
 using LandBuilder.Infrastructure.Content;
+using Xunit;
 
 namespace LandBuilder.Tests;
 
-public static class Mvp0DeterminismTests
+public class Mvp0DeterminismTests
 {
-    public static void SameInputsProduceSameOutputs()
+    [Fact]
+    public void SameInputsProduceSameOutputs()
     {
         var commands = new IGameCommand[]
         {
@@ -22,10 +24,10 @@ public static class Mvp0DeterminismTests
         var a = Replay(commands);
         var b = Replay(commands);
 
-        if (a.Economy.Coins != b.Economy.Coins) throw new Exception("Coins diverged");
-        if (a.Progression.CurrentObjectiveIndex != b.Progression.CurrentObjectiveIndex) throw new Exception("Objective index diverged");
-        if (a.Buildings.Count != b.Buildings.Count) throw new Exception("Building count diverged");
-        if (a.Buildings[1].Level != b.Buildings[1].Level) throw new Exception("Building level diverged");
+        Assert.Equal(b.Economy.Coins, a.Economy.Coins);
+        Assert.Equal(b.Progression.CurrentObjectiveIndex, a.Progression.CurrentObjectiveIndex);
+        Assert.Equal(b.Buildings.Count, a.Buildings.Count);
+        Assert.Equal(b.Buildings[1].Level, a.Buildings[1].Level);
     }
 
     private static GameState Replay(IEnumerable<IGameCommand> commands)

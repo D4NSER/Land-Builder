@@ -1,39 +1,42 @@
 using LandBuilder.Domain;
 using LandBuilder.Infrastructure.Content;
+using Xunit;
 
 namespace LandBuilder.Tests;
 
-public static class Mvp1DomainRulesTests
+public class Mvp1DomainRulesTests
 {
-    public static void PlaceBuildingConsumesCoinsAndAddsBuilding()
+    [Fact]
+    public void PlaceBuildingConsumesCoinsAndAddsBuilding()
     {
         var objectives = new ObjectiveDefinitionLoader().Load(Path.Combine("data", "objectives", "mvp2_objectives.json"));
         var state = GameState.CreateInitial(objectives);
         var result = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0));
 
-        if (result.State.Buildings.Count != 1) throw new Exception("Expected one building");
-        if (result.State.Economy.Coins != 18) throw new Exception("Expected 18 coins after placing camp and objective reward");
+        Assert.Equal(1, result.State.Buildings.Count);
+        Assert.Equal(18, result.State.Economy.Coins);
     }
 
-    public static void PlaceBuildingFailsWhenTileSlotsFull()
+    [Fact]
+    public void PlaceBuildingFailsWhenTileSlotsFull()
     {
         var objectives = new ObjectiveDefinitionLoader().Load(Path.Combine("data", "objectives", "mvp2_objectives.json"));
         var state = GameState.CreateInitial(objectives);
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0)).State;
         var result = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0));
 
-        if (result.State.Buildings.Count != 1) throw new Exception("Unexpected extra building");
-        if (result.Events.OfType<CommandRejectedEvent>().FirstOrDefault() is null)
-            throw new Exception("Expected command rejection");
+        Assert.Single(result.State.Buildings);
+        Assert.Contains(result.Events, e => e is CommandRejectedEvent);
     }
 
-    public static void TickGeneratesCoinsFromBuildings()
+    [Fact]
+    public void TickGeneratesCoinsFromBuildings()
     {
         var objectives = new ObjectiveDefinitionLoader().Load(Path.Combine("data", "objectives", "mvp2_objectives.json"));
         var state = GameState.CreateInitial(objectives);
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0)).State;
 
         var result = DeterministicSimulator.Apply(state, new TickCommand(4));
-        if (result.State.Economy.Coins <= state.Economy.Coins) throw new Exception("Expected tick to increase coins");
+        Assert.True(result.State.Economy.Coins > state.Economy.Coins);
     }
 }

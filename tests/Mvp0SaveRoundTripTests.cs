@@ -1,12 +1,14 @@
 using LandBuilder.Domain;
 using LandBuilder.Infrastructure;
 using LandBuilder.Infrastructure.Content;
+using Xunit;
 
 namespace LandBuilder.Tests;
 
-public static class Mvp0SaveRoundTripTests
+public class Mvp0SaveRoundTripTests
 {
-    public static void SaveLoadRoundTripPreservesState()
+    [Fact]
+    public void SaveLoadRoundTripPreservesState()
     {
         var savePath = Path.Combine(Path.GetTempPath(), "landbuilder_mvp2_test_save.json");
         var objectives = new ObjectiveDefinitionLoader().Load(Path.Combine("data", "objectives", "mvp2_objectives.json"));
@@ -20,10 +22,10 @@ public static class Mvp0SaveRoundTripTests
         repo.Save(savePath, state);
         var loaded = repo.Load(savePath);
 
-        if (loaded.Economy.Coins != state.Economy.Coins) throw new Exception("Coins mismatch after load");
-        if (loaded.Buildings.Count != state.Buildings.Count) throw new Exception("Building count mismatch");
-        if (loaded.Progression.CurrentObjectiveIndex != state.Progression.CurrentObjectiveIndex) throw new Exception("Progression index mismatch");
-        if (loaded.Meta.SchemaVersion != 3) throw new Exception("Schema version mismatch");
+        Assert.Equal(state.Economy.Coins, loaded.Economy.Coins);
+        Assert.Equal(state.Buildings.Count, loaded.Buildings.Count);
+        Assert.Equal(state.Progression.CurrentObjectiveIndex, loaded.Progression.CurrentObjectiveIndex);
+        Assert.Equal(3, loaded.Meta.SchemaVersion);
 
         File.Delete(savePath);
     }
