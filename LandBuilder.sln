@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{144985C6-2937-4E50-BC5E-3BF17DE2AB16}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LandBuilder.Core", "src\LandBuilder.Core\LandBuilder.Core.csproj", "{C26EFE25-F523-4756-BB71-03FCD070E83C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A13E47D8-DB1F-4EC4-A41B-BCC347A2ADE7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LandBuilder.Tests", "tests\LandBuilder.Tests\LandBuilder.Tests.csproj", "{ED365329-BA0E-4E88-A210-C2485CDD40D0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C26EFE25-F523-4756-BB71-03FCD070E83C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C26EFE25-F523-4756-BB71-03FCD070E83C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C26EFE25-F523-4756-BB71-03FCD070E83C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C26EFE25-F523-4756-BB71-03FCD070E83C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED365329-BA0E-4E88-A210-C2485CDD40D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED365329-BA0E-4E88-A210-C2485CDD40D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED365329-BA0E-4E88-A210-C2485CDD40D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED365329-BA0E-4E88-A210-C2485CDD40D0}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C26EFE25-F523-4756-BB71-03FCD070E83C} = {144985C6-2937-4E50-BC5E-3BF17DE2AB16}
+		{ED365329-BA0E-4E88-A210-C2485CDD40D0} = {A13E47D8-DB1F-4EC4-A41B-BCC347A2ADE7}
+	EndGlobalSection
+EndGlobal
