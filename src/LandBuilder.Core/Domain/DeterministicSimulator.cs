@@ -46,11 +46,11 @@ public static class DeterministicSimulator
 {
     private static readonly Dictionary<string, BuildingDefinition> BuildingDefinitions = new()
     {
-        ["Camp"] = new BuildingDefinition("Camp", 12, 1, 3, new[] { 8, 14 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
-        ["Quarry"] = new BuildingDefinition("Quarry", 18, 2, 3, new[] { 12, 20 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Rocky, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
-        ["Sawmill"] = new BuildingDefinition("Sawmill", 22, 3, 3, new[] { 14, 24 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1),
-        ["Forester"] = new BuildingDefinition("Forester", 20, 2, 3, new[] { 12, 18 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Forest, RequiredBuildingTypeId: "Sawmill", RequiredBuildingCount: 1),
-        ["ClayWorks"] = new BuildingDefinition("ClayWorks", 26, 4, 3, new[] { 16, 26 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Clay, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1)
+        ["Camp"] = new BuildingDefinition("Camp", 11, 1, 3, new[] { 9, 15 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
+        ["Quarry"] = new BuildingDefinition("Quarry", 20, 2, 3, new[] { 13, 22 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Rocky, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
+        ["Sawmill"] = new BuildingDefinition("Sawmill", 24, 3, 3, new[] { 15, 25 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1),
+        ["Forester"] = new BuildingDefinition("Forester", 22, 2, 3, new[] { 13, 19 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Forest, RequiredBuildingTypeId: "Sawmill", RequiredBuildingCount: 1),
+        ["ClayWorks"] = new BuildingDefinition("ClayWorks", 28, 4, 3, new[] { 17, 27 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Clay, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1)
     };
 
     public static (GameState State, IReadOnlyList<IDomainEvent> Events) Apply(GameState state, IGameCommand command)
@@ -358,7 +358,7 @@ public static class DeterministicSimulator
 
     private static int ComputeExpansionCost(int baseUnlockCost, int tileDepth, int nextUnlockIndex)
     {
-        const int depthStep = 1;
+        const int depthStep = 2;
         const int indexStep = 1;
 
         var indexPremium = Math.Max(0, nextUnlockIndex - 1) * indexStep;

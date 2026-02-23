@@ -19,3 +19,4 @@ Structured project documentation is being developed in stages.
 - Stage 9: Desktop Export Checklist → `docs/export_checklist.md`
 - Stage 10A: Map Loop Expansion (Deterministic Multi-Pocket Topology) → `docs/stage10a_map_loop_expansion.md`
 - Stage 10B: Small Building Set Parity (Exactly +2 Buildings) → `docs/stage10b_small_building_set_parity.md`
+- Stage 10C: Economy Pacing + Objective Continuity (Deterministic Tuning) → `docs/stage10c_economy_pacing_and_continuity.md`
