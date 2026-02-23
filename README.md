@@ -24,3 +24,5 @@ Structured project documentation is being developed in stages.
 - Stage 12: Godot Integration Fixes → `docs/stage12_godot_integration_fixes.md`
 - Land Builder Game Spec (Reset) → `docs/land_builder_game_spec.md`
 - Stage 13: Deterministic Session Continuity & Replay Safety → `docs/stage13_deterministic_session_continuity.md`
+- Stage 14: Unlockable Tile Progression System → `docs\stage14_unlockable_tile_progression.md`
+- Stage 15: Deterministic Scoring + High Score Persistence → `docs\stage15_deterministic_scoring_and_highscore.md`

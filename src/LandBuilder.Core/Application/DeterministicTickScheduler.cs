@@ -21,7 +21,10 @@ public sealed class DeterministicTickScheduler
 
         while (_accumulator >= _tickDurationSeconds)
         {
-            _session.Dispatch(new TickCommand(1));
+            if (_session.State.CurrentTile is null)
+            {
+                _session.IssueCommand(new DrawTileCommand());
+            }
             _accumulator -= _tickDurationSeconds;
             processedTicks++;
         }

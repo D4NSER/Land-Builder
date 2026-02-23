@@ -1,4 +1,5 @@
 using LandBuilder.Domain;
+using LandBuilder.Infrastructure;
 
 namespace LandBuilder.Application;
 
@@ -19,6 +20,8 @@ public sealed class GameSession
 {
     private readonly DeterministicSimulator _simulator = new();
     private readonly IEventSink _sink;
+    private readonly HighScoreRepository? _highScoreRepository;
+    private readonly string? _highScorePath;
 
     public GameState State { get; private set; }
 
@@ -28,11 +31,39 @@ public sealed class GameSession
         _sink = sink;
     }
 
+    public GameSession(GameState initialState, IEventSink sink, HighScoreRepository highScoreRepository, string highScorePath)
+        : this(initialState, sink)
+    {
+        _highScoreRepository = highScoreRepository;
+        _highScorePath = highScorePath;
+    }
+
     public void IssueCommand(IGameCommand command)
     {
         var (next, events) = _simulator.Apply(State, command);
         State = next;
+
         foreach (var ev in events)
+        {
             _sink.Publish(ev);
+            HandleHighScorePersistence(ev);
+        }
+    }
+
+    private void HandleHighScorePersistence(IDomainEvent domainEvent)
+    {
+        if (domainEvent is not ScoreSubmittedEvent submitted ||
+            _highScoreRepository is null ||
+            string.IsNullOrWhiteSpace(_highScorePath))
+        {
+            return;
+        }
+
+        var currentHighScore = _highScoreRepository.LoadHighScore(_highScorePath);
+        if (submitted.Score <= currentHighScore)
+            return;
+
+        _highScoreRepository.SaveHighScore(_highScorePath, submitted.Score);
+        _sink.Publish(new HighScoreUpdatedEvent(currentHighScore, submitted.Score));
     }
 }

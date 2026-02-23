@@ -47,6 +47,7 @@ public class LandBuilderReplayDeterminismTests
             foreach (var c in postSaveCommands) replay.IssueCommand(c);
 
             Assert.Equal(control.State, replay.State);
+            Assert.Equal(control.State.GetHashCode(), replay.State.GetHashCode());
         }
         finally
         {

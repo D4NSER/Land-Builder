@@ -22,6 +22,12 @@ public sealed class DeterministicSimulator
             case DrawTileCommand:
                 ApplyDraw(working, events);
                 break;
+            case SubmitScoreCommand:
+                ApplySubmitScore(working, events);
+                break;
+            case UnlockTileCommand unlock:
+                ApplyUnlock(working, unlock, events);
+                break;
             case PlaceTileCommand place:
                 ApplyPlace(working, place, events);
                 break;
@@ -71,9 +77,17 @@ public sealed class DeterministicSimulator
 
     private void ApplyDraw(GameState state, List<IDomainEvent> events)
     {
+        var unlocked = state.UnlockedTiles.OrderBy(x => x).ToArray();
+        if (unlocked.Length == 0)
+        {
+            events.Add(new CommandRejectedEvent("NO_UNLOCKED_TILES", "No tiles are unlocked."));
+            state.LastMessage = "No tiles are unlocked.";
+            return;
+        }
+
         var rng = NextRng(state.RngState);
-        var index = (int)(rng % (ulong)TileDeck.Count);
-        var tile = TileDeck[index].TileType;
+        var index = (int)(rng % (ulong)unlocked.Length);
+        var tile = unlocked[index];
 
         state.RngState = rng;
         state.RngStep += 1;
@@ -81,6 +95,32 @@ public sealed class DeterministicSimulator
         state.LastMessage = $"Drew {tile}.";
 
         events.Add(new TileDrawnEvent(tile));
+    }
+
+    private static void ApplyUnlock(GameState state, UnlockTileCommand unlock, List<IDomainEvent> events)
+    {
+        try
+        {
+            var next = state.Unlock(unlock.TileType);
+            if (ReferenceEquals(next, state))
+            {
+                state.LastMessage = $"{unlock.TileType} is already unlocked.";
+                return;
+            }
+
+            state.ApplySnapshotFrom(next);
+        }
+        catch (InvalidOperationException ex)
+        {
+            state.LastMessage = ex.Message;
+            events.Add(new CommandRejectedEvent("INSUFFICIENT_COINS", ex.Message));
+        }
+    }
+
+    private static void ApplySubmitScore(GameState state, List<IDomainEvent> events)
+    {
+        state.LastMessage = $"Submitted score {state.Score}.";
+        events.Add(new ScoreSubmittedEvent(state.Score));
     }
 
     private void ApplyPlace(GameState state, PlaceTileCommand place, List<IDomainEvent> events)

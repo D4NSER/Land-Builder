@@ -40,6 +40,8 @@ public sealed record PlacedTile(TileType TileType, int RotationQuarterTurns);
 
 public sealed class GameState : IEquatable<GameState>
 {
+    private SortedSet<TileType> _unlockedTiles = new() { TileType.Plains };
+
     public const int BoardWidth = 3;
     public const int BoardHeight = 3;
 
@@ -49,6 +51,31 @@ public sealed class GameState : IEquatable<GameState>
     public TileType? CurrentTile { get; set; }
     public Dictionary<int, PlacedTile> Board { get; set; } = new();
     public string LastMessage { get; set; } = "Ready";
+    public IReadOnlyCollection<TileType> UnlockedTiles => _unlockedTiles;
+
+    public static IReadOnlyList<TileType> AllTileTypes { get; } = Enum.GetValues<TileType>().OrderBy(x => x).ToArray();
+
+    public static IReadOnlyDictionary<TileType, int> UnlockCosts { get; } = new Dictionary<TileType, int>
+    {
+        [TileType.Plains] = 0,
+        [TileType.Woods] = 10,
+        [TileType.River] = 20,
+        [TileType.Meadow] = 30,
+        [TileType.Village] = 40,
+        [TileType.Lake] = 50
+    };
+
+    public static IReadOnlyDictionary<TileType, int> ScoreBasePoints { get; } = new Dictionary<TileType, int>
+    {
+        [TileType.Plains] = 1,
+        [TileType.Woods] = 2,
+        [TileType.River] = 3,
+        [TileType.Meadow] = 4,
+        [TileType.Village] = 5,
+        [TileType.Lake] = 6
+    };
+
+    public int Score => ComputeScore(Board);
 
     public static GameState CreateInitial(ulong seed = 0xC0FFEEUL)
     {
@@ -65,7 +92,7 @@ public sealed class GameState : IEquatable<GameState>
 
     public GameState Clone()
     {
-        return new GameState
+        var clone = new GameState
         {
             Coins = Coins,
             RngState = RngState,
@@ -74,6 +101,49 @@ public sealed class GameState : IEquatable<GameState>
             LastMessage = LastMessage,
             Board = Board.ToDictionary(k => k.Key, v => v.Value)
         };
+        clone.SetUnlockedTiles(_unlockedTiles);
+        return clone;
+    }
+
+    public bool IsUnlocked(TileType tile) => _unlockedTiles.Contains(tile);
+
+    public GameState Unlock(TileType tile)
+    {
+        if (_unlockedTiles.Contains(tile))
+            return this;
+
+        var cost = UnlockCosts.TryGetValue(tile, out var value)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(tile), tile, "Unknown tile unlock cost.");
+
+        if (Coins < cost)
+            throw new InvalidOperationException("Not enough coins to unlock tile.");
+
+        var next = Clone();
+        next.Coins -= cost;
+        next._unlockedTiles.Add(tile);
+        next.LastMessage = $"Unlocked {tile} for {cost} coins.";
+        return next;
+    }
+
+    public void SetUnlockedTiles(IEnumerable<TileType> tiles)
+    {
+        var normalized = new SortedSet<TileType>(tiles);
+        if (normalized.Count == 0)
+            normalized.Add(TileType.Plains);
+
+        _unlockedTiles = normalized;
+    }
+
+    internal void ApplySnapshotFrom(GameState snapshot)
+    {
+        Coins = snapshot.Coins;
+        RngState = snapshot.RngState;
+        RngStep = snapshot.RngStep;
+        CurrentTile = snapshot.CurrentTile;
+        Board = snapshot.Board.ToDictionary(k => k.Key, v => v.Value);
+        LastMessage = snapshot.LastMessage;
+        SetUnlockedTiles(snapshot.UnlockedTiles);
     }
 
     public bool Equals(GameState? other)
@@ -85,11 +155,16 @@ public sealed class GameState : IEquatable<GameState>
             RngState != other.RngState ||
             RngStep != other.RngStep ||
             CurrentTile != other.CurrentTile ||
+            Score != other.Score ||
             LastMessage != other.LastMessage ||
-            Board.Count != other.Board.Count)
+            Board.Count != other.Board.Count ||
+            _unlockedTiles.Count != other._unlockedTiles.Count)
         {
             return false;
         }
+
+        if (!_unlockedTiles.SetEquals(other._unlockedTiles))
+            return false;
 
         foreach (var kv in Board)
         {
@@ -109,7 +184,10 @@ public sealed class GameState : IEquatable<GameState>
         hash.Add(RngState);
         hash.Add(RngStep);
         hash.Add(CurrentTile);
+        hash.Add(Score);
         hash.Add(LastMessage);
+        foreach (var tile in _unlockedTiles)
+            hash.Add(tile);
         foreach (var kv in Board.OrderBy(x => x.Key))
         {
             hash.Add(kv.Key);
@@ -117,5 +195,45 @@ public sealed class GameState : IEquatable<GameState>
         }
 
         return hash.ToHashCode();
+    }
+
+    private static int ComputeScore(IReadOnlyDictionary<int, PlacedTile> board)
+    {
+        var score = 0;
+
+        foreach (var placed in board.Values)
+        {
+            if (!ScoreBasePoints.TryGetValue(placed.TileType, out var points))
+                throw new InvalidOperationException($"Missing score rule for tile type {placed.TileType}.");
+
+            score += points;
+        }
+
+        foreach (var kv in board.OrderBy(x => x.Key))
+        {
+            var slot = kv.Key;
+            var tileType = kv.Value.TileType;
+            var x = slot % BoardWidth;
+            var y = slot / BoardWidth;
+
+            if (x < BoardWidth - 1 &&
+                board.TryGetValue(slot + 1, out var right) &&
+                right.TileType == tileType)
+            {
+                score += 2;
+            }
+
+            if (y < BoardHeight - 1 &&
+                board.TryGetValue(slot + BoardWidth, out var down) &&
+                down.TileType == tileType)
+            {
+                score += 2;
+            }
+        }
+
+        if (board.Count == BoardWidth * BoardHeight)
+            score += 10;
+
+        return score;
     }
 }

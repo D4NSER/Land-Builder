@@ -11,3 +11,7 @@ public sealed record CoinsEarnedEvent(long Amount, string Reason) : IDomainEvent
 public sealed record PlacementRejectedEvent(int SlotIndex, PlacementRejectionReason Reason, string Message) : IDomainEvent;
 
 public sealed record CommandRejectedEvent(string ReasonCode, string Message) : IDomainEvent;
+
+public sealed record ScoreSubmittedEvent(int Score) : IDomainEvent;
+
+public sealed record HighScoreUpdatedEvent(int PreviousHighScore, int NewHighScore) : IDomainEvent;

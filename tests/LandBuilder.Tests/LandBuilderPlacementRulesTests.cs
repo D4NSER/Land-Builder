@@ -27,6 +27,8 @@ public class LandBuilderPlacementRulesTests
         while (true)
         {
             state = GameState.CreateInitial(seed);
+            state.Coins = 100;
+            (state, _) = sim.Apply(state, new UnlockTileCommand(TileType.Village));
             (state, _) = sim.Apply(state, new DrawTileCommand());
             if (state.CurrentTile == TileType.Plains)
             {

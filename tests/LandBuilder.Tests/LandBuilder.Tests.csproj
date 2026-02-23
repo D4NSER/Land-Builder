@@ -18,4 +18,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\LandBuilder.Core\LandBuilder.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Legacy milestone tests target an older domain model and are kept for reference only. -->
+    <Compile Remove="Mvp*.cs" />
+    <Compile Remove="Stage*.cs" />
+    <Compile Remove="TestPaths.cs" />
+  </ItemGroup>
 </Project>

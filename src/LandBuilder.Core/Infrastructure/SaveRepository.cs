@@ -5,7 +5,9 @@ namespace LandBuilder.Infrastructure;
 
 public sealed class SaveRepository
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 3;
+    private const int LegacyStage14SchemaVersion = 2;
+    private const int LegacyStage13SchemaVersion = 1;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -22,6 +24,8 @@ public sealed class SaveRepository
             RngStep = state.RngStep,
             CurrentTile = state.CurrentTile,
             LastMessage = state.LastMessage,
+            Score = state.Score,
+            UnlockedTiles = state.UnlockedTiles.OrderBy(x => x).ToList(),
             Board = state.Board.Select(x => new SaveTile
             {
                 SlotIndex = x.Key,
@@ -66,9 +70,22 @@ public sealed class SaveRepository
             return false;
         }
 
-        if (payload.SchemaVersion != CurrentSchemaVersion)
+        if (payload.SchemaVersion != CurrentSchemaVersion &&
+            payload.SchemaVersion != LegacyStage14SchemaVersion &&
+            payload.SchemaVersion != LegacyStage13SchemaVersion)
         {
             error = $"Unsupported save schema: {payload.SchemaVersion}.";
+            return false;
+        }
+
+        var unlockedTiles = payload.SchemaVersion == LegacyStage13SchemaVersion
+            ? GameState.AllTileTypes
+            : payload.UnlockedTiles;
+
+        if ((payload.SchemaVersion == CurrentSchemaVersion || payload.SchemaVersion == LegacyStage14SchemaVersion) &&
+            unlockedTiles is null)
+        {
+            error = "Save is invalid: missing unlocked tiles.";
             return false;
         }
 
@@ -83,6 +100,14 @@ public sealed class SaveRepository
                 x => x.SlotIndex,
                 x => new PlacedTile(x.TileType, x.RotationQuarterTurns)) ?? new Dictionary<int, PlacedTile>()
         };
+        state.SetUnlockedTiles(unlockedTiles ?? Array.Empty<TileType>());
+
+        if (payload.SchemaVersion == CurrentSchemaVersion && payload.Score is int persistedScore && persistedScore != state.Score)
+        {
+            error = "Save is invalid: score does not match board state.";
+            state = GameState.CreateInitial();
+            return false;
+        }
 
         return true;
     }
@@ -103,6 +128,8 @@ public sealed class SaveRepository
         public int RngStep { get; set; }
         public TileType? CurrentTile { get; set; }
         public string? LastMessage { get; set; }
+        public int? Score { get; set; }
+        public List<TileType>? UnlockedTiles { get; set; }
         public List<SaveTile>? Board { get; set; }
     }
 
