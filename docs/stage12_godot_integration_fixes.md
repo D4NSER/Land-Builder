@@ -9,7 +9,7 @@ Godot was configured to compile/load a presentation assembly named `LandBuilder.
   - `AssemblyName` set to `LandBuilder.Presentation`
   - `RootNamespace` set to `LandBuilder.Presentation`
   - References `src/LandBuilder.Core/LandBuilder.Core.csproj`
-- Updated `LandBuilder.sln` to include the new `LandBuilder.Presentation` project for CLI parity.
+- Kept `LandBuilder.Presentation.csproj` for Godot C# integration, but excluded it from `LandBuilder.sln` so CLI build/test do not require Godot SDK references.
 - Verified `scenes/main.tscn` script binding still points to `res://src/Presentation/MainController.cs` and class namespace remains `LandBuilder.Presentation.MainController`.
 
 ## Windows Godot editor verification steps
@@ -30,3 +30,9 @@ Focus checks:
 - C# scripts are built before export.
 - Exported `.exe` launches.
 - No assembly/script load failures in exported run.
+
+
+## Workflow split (intended)
+- **CLI (`dotnet build/test LandBuilder.sln`)** builds only `LandBuilder.Core` + `LandBuilder.Tests`.
+- **Godot editor** builds presentation scripts from `src/Presentation/` using Godot .NET tooling.
+- This keeps automated test/build reproducible on machines without Godot while preserving playable editor/runtime behavior.

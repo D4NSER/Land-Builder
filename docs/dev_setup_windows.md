@@ -44,7 +44,7 @@ Expected behavior (sanity):
 - Buttons/hotkeys for expand/place/upgrade/save/load respond.
 - Deterministic progression updates after commands/ticks.
 
-## 5) Run tests from repo root
+## 5) CLI build/test workflow (Core + Tests only)
 From repo root in PowerShell:
 
 ```powershell
@@ -53,6 +53,10 @@ dotnet test .\LandBuilder.sln
 ```
 
 Expected: build succeeds and tests pass.
+
+Why this works without Godot installed:
+- `LandBuilder.sln` intentionally includes only `LandBuilder.Core` and `LandBuilder.Tests`.
+- Godot-dependent presentation scripts (`src/Presentation/MainController.cs`) are compiled by the Godot .NET editor pipeline, not by the CLI solution build.
 
 ## 6) Save file location on Windows (`user://` mapping)
 Godot `user://` saves are typically under:
