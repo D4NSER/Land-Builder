@@ -14,7 +14,8 @@ public enum ValidationReasonCode
     TerrainMismatch = 9,
     NoBuildingSlotsAvailable = 10,
     BuildingNotFound = 11,
-    BuildingAlreadyMaxLevel = 12
+    BuildingAlreadyMaxLevel = 12,
+    MissingPrerequisiteBuildingCount = 13
 }
 
 public enum TileStateKind
@@ -45,8 +46,9 @@ public static class DeterministicSimulator
 {
     private static readonly Dictionary<string, BuildingDefinition> BuildingDefinitions = new()
     {
-        ["Camp"] = new BuildingDefinition("Camp", 12, 1, 3, new[] { 8, 14 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass),
-        ["Quarry"] = new BuildingDefinition("Quarry", 18, 2, 3, new[] { 12, 20 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Rocky)
+        ["Camp"] = new BuildingDefinition("Camp", 12, 1, 3, new[] { 8, 14 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
+        ["Quarry"] = new BuildingDefinition("Quarry", 18, 2, 3, new[] { 12, 20 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Rocky, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
+        ["Sawmill"] = new BuildingDefinition("Sawmill", 22, 3, 3, new[] { 14, 24 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1)
     };
 
     public static (GameState State, IReadOnlyList<IDomainEvent> Events) Apply(GameState state, IGameCommand command)
@@ -91,27 +93,38 @@ public static class DeterministicSimulator
     public static PlacementValidationResult ValidatePlacement(GameState state, string buildingTypeId, int tileId)
     {
         if (!BuildingDefinitions.TryGetValue(buildingTypeId, out var definition))
-            return InvalidPlacement(ValidationReasonCode.UnknownBuildingType, 0, TileStateKind.Locked);
+            return InvalidPlacement(ValidationReasonCode.UnknownBuildingType, 0, TileStateKind.Locked, null);
 
         if (definition.RequiredUnlockFlag is not null && !state.Progression.UnlockFlags.Contains(definition.RequiredUnlockFlag))
-            return InvalidPlacement(ValidationReasonCode.BuildingTypeNotUnlocked, definition.BaseCost, TileStateKind.Locked);
+            return InvalidPlacement(ValidationReasonCode.BuildingTypeNotUnlocked, definition.BaseCost, TileStateKind.Locked, null);
+
+        if (!string.IsNullOrWhiteSpace(definition.RequiredBuildingTypeId))
+        {
+            var currentCount = state.Buildings.Values.Count(b => b.BuildingTypeId == definition.RequiredBuildingTypeId);
+            if (currentCount < definition.RequiredBuildingCount)
+                return InvalidPlacement(
+                    ValidationReasonCode.MissingPrerequisiteBuildingCount,
+                    definition.BaseCost,
+                    TileStateKind.Unlocked,
+                    $"Requires at least {definition.RequiredBuildingCount} {definition.RequiredBuildingTypeId}");
+        }
 
         if (!state.World.Tiles.TryGetValue(tileId, out var tile))
-            return InvalidPlacement(ValidationReasonCode.TileNotFound, definition.BaseCost, TileStateKind.Locked);
+            return InvalidPlacement(ValidationReasonCode.TileNotFound, definition.BaseCost, TileStateKind.Locked, null);
 
         var tileState = ToTileStateKind(state, tile, definition);
         if (tile.Ownership != TileOwnership.Unlocked)
-            return InvalidPlacement(ValidationReasonCode.TileNotBuildable, definition.BaseCost, tileState);
+            return InvalidPlacement(ValidationReasonCode.TileNotBuildable, definition.BaseCost, tileState, null);
 
         if (tile.Terrain != definition.RequiredTerrain)
-            return InvalidPlacement(ValidationReasonCode.TerrainMismatch, definition.BaseCost, tileState);
+            return InvalidPlacement(ValidationReasonCode.TerrainMismatch, definition.BaseCost, tileState, null);
 
         var buildingsOnTile = state.Buildings.Values.Count(b => b.TileId == tileId);
         if (buildingsOnTile >= tile.MaxBuildingSlots)
-            return InvalidPlacement(ValidationReasonCode.NoBuildingSlotsAvailable, definition.BaseCost, tileState);
+            return InvalidPlacement(ValidationReasonCode.NoBuildingSlotsAvailable, definition.BaseCost, tileState, null);
 
         if (state.Economy.Coins < definition.BaseCost)
-            return InvalidPlacement(ValidationReasonCode.InsufficientCoins, definition.BaseCost, tileState);
+            return InvalidPlacement(ValidationReasonCode.InsufficientCoins, definition.BaseCost, tileState, null);
 
         return new PlacementValidationResult(true, ValidationReasonCode.None, ValidationMessage(ValidationReasonCode.None), definition.BaseCost, TileStateKind.Buildable);
     }
@@ -133,6 +146,7 @@ public static class DeterministicSimulator
             ValidationReasonCode.NoBuildingSlotsAvailable => "No building slots available",
             ValidationReasonCode.BuildingNotFound => "Building not found",
             ValidationReasonCode.BuildingAlreadyMaxLevel => "Building already max level",
+            ValidationReasonCode.MissingPrerequisiteBuildingCount => "Missing prerequisite building count",
             _ => "Unknown validation error"
         };
     }
@@ -307,11 +321,23 @@ public static class DeterministicSimulator
         };
     }
 
-    public static int GetProductionPerTick(GameState state)
+    public static IReadOnlyList<(int BuildingId, string BuildingTypeId, int Level, int Contribution)> GetBuildingContributions(GameState state)
     {
         return state.Buildings.Values
             .OrderBy(b => b.BuildingId)
-            .Sum(b => BuildingDefinitions.TryGetValue(b.BuildingTypeId, out var def) ? def.BaseProductionPerTick * b.Level : 0);
+            .Select(b =>
+            {
+                var contribution = BuildingDefinitions.TryGetValue(b.BuildingTypeId, out var def)
+                    ? def.BaseProductionPerTick * b.Level
+                    : 0;
+                return (b.BuildingId, b.BuildingTypeId, b.Level, contribution);
+            })
+            .ToList();
+    }
+
+    public static int GetProductionPerTick(GameState state)
+    {
+        return GetBuildingContributions(state).Sum(x => x.Contribution);
     }
 
     private static int ComputeExpansionCost(int baseUnlockCost, int tileDepth, int nextUnlockIndex)
@@ -365,8 +391,8 @@ public static class DeterministicSimulator
     private static ExpansionValidationResult InvalidExpansion(ValidationReasonCode code, int cost, int depth, int nextUnlockIndex, TileStateKind tileState)
         => new(false, code, ValidationMessage(code), cost, depth, nextUnlockIndex, tileState);
 
-    private static PlacementValidationResult InvalidPlacement(ValidationReasonCode code, int cost, TileStateKind tileState)
-        => new(false, code, ValidationMessage(code), cost, tileState);
+    private static PlacementValidationResult InvalidPlacement(ValidationReasonCode code, int cost, TileStateKind tileState, string? overrideMessage)
+        => new(false, code, overrideMessage ?? ValidationMessage(code), cost, tileState);
 
     private sealed record BuildingDefinition(
         string BuildingTypeId,
@@ -375,5 +401,7 @@ public static class DeterministicSimulator
         int MaxLevel,
         int[] UpgradeCosts,
         string? RequiredUnlockFlag,
-        TerrainType RequiredTerrain);
+        TerrainType RequiredTerrain,
+        string? RequiredBuildingTypeId,
+        int RequiredBuildingCount);
 }

@@ -12,7 +12,8 @@ public partial class MainController : Control
     {
         None = 0,
         Camp = 1,
-        Quarry = 2
+        Quarry = 2,
+        Sawmill = 3
     }
 
     private sealed record HotkeyBinding(Key Key, bool CtrlRequired, Action Action, string HelpText);
@@ -133,6 +134,7 @@ public partial class MainController : Control
         _hotkeys.Add(new HotkeyBinding(Key.Key2, false, () => IssueCommand(new ExpandTileCommand(2)), "2: Expand Tile 2"));
         _hotkeys.Add(new HotkeyBinding(Key.C, false, () => EnterBuildMode(BuildMode.Camp), "C: Camp Build Mode"));
         _hotkeys.Add(new HotkeyBinding(Key.Q, false, () => EnterBuildMode(BuildMode.Quarry), "Q: Quarry Build Mode"));
+        _hotkeys.Add(new HotkeyBinding(Key.B, false, () => EnterBuildMode(BuildMode.Sawmill), "B: Sawmill Build Mode"));
         _hotkeys.Add(new HotkeyBinding(Key.T, false, () => AttemptBuildOnTile(0), "T: Build on Tile 0"));
         _hotkeys.Add(new HotkeyBinding(Key.Y, false, () => AttemptBuildOnTile(2), "Y: Build on Tile 2"));
         _hotkeys.Add(new HotkeyBinding(Key.U, false, () => IssueCommand(new UpgradeBuildingCommand(1)), "U: Upgrade Building 1"));
@@ -172,6 +174,7 @@ public partial class MainController : Control
         _expandTile2Button.Pressed += () => IssueCommand(new ExpandTileCommand(2));
         GetNode<Button>("VBox/Buttons/EnterCampBuildMode").Pressed += () => EnterBuildMode(BuildMode.Camp);
         GetNode<Button>("VBox/Buttons/EnterQuarryBuildMode").Pressed += () => EnterBuildMode(BuildMode.Quarry);
+        GetNode<Button>("VBox/Buttons/EnterSawmillBuildMode").Pressed += () => EnterBuildMode(BuildMode.Sawmill);
         GetNode<Button>("VBox/Buttons/CancelBuildMode").Pressed += CancelBuildMode;
         _tile0ActionButton.Pressed += () => AttemptBuildOnTile(0);
         _tile2ActionButton.Pressed += () => AttemptBuildOnTile(2);
@@ -206,7 +209,13 @@ public partial class MainController : Control
             return;
         }
 
-        var buildingType = _buildMode == BuildMode.Camp ? "Camp" : "Quarry";
+        var buildingType = _buildMode switch
+        {
+            BuildMode.Camp => "Camp",
+            BuildMode.Quarry => "Quarry",
+            BuildMode.Sawmill => "Sawmill",
+            _ => "Camp"
+        };
         var validation = DeterministicSimulator.ValidatePlacement(_session.State, buildingType, tileId);
         if (!validation.IsValid)
         {
@@ -263,7 +272,10 @@ public partial class MainController : Control
     {
         var projection = UiProjection.From(_session.State, _eventSink.Events);
         _coinsLabel.Text = $"Coins: {projection.Coins}";
-        _statsLabel.Text = $"Buildings: {projection.BuildingsCount} | Production/tick: {projection.ProductionPerTick}";
+        var contributionText = projection.BuildingContributions.Count == 0
+            ? "none"
+            : string.Join(", ", projection.BuildingContributions.Select(c => $"{c.BuildingTypeId}#{c.BuildingId}=+{c.ContributionPerTick}"));
+        _statsLabel.Text = $"Buildings: {projection.BuildingsCount} | Production/tick: {projection.ProductionPerTick} | Contributions: {contributionText}";
         _objectiveLabel.Text = $"Active Objective: {projection.ActiveObjectiveId}";
         _objectiveProgressLabel.Text = $"Progress: {projection.ObjectiveProgress}";
         _completionLabel.Text = $"Last Completion: {projection.LastCompletionMessage}";
@@ -296,7 +308,13 @@ public partial class MainController : Control
         _expandTile1Button.Text = $"Expand Tile 1 ({tile1.ExpansionPreviewCost} coins)";
         _expandTile2Button.Text = $"Expand Tile 2 ({tile2.ExpansionPreviewCost} coins)";
 
-        var mode = _buildMode == BuildMode.Camp ? "Camp" : "Quarry";
+        var mode = _buildMode switch
+        {
+            BuildMode.Camp => "Camp",
+            BuildMode.Quarry => "Quarry",
+            BuildMode.Sawmill => "Sawmill",
+            _ => "Camp"
+        };
         var tile0 = projection.TileStates.First(t => t.TileId == 0);
         var tile2Build = projection.TileStates.First(t => t.TileId == 2);
 
@@ -309,10 +327,34 @@ public partial class MainController : Control
             return;
         }
 
-        var tile0Valid = _buildMode == BuildMode.Camp ? tile0.CanPlaceCamp : tile0.CanPlaceQuarry;
-        var tile2Valid = _buildMode == BuildMode.Camp ? tile2Build.CanPlaceCamp : tile2Build.CanPlaceQuarry;
-        var tile0Reason = _buildMode == BuildMode.Camp ? tile0.CampReasonCode : tile0.QuarryReasonCode;
-        var tile2Reason = _buildMode == BuildMode.Camp ? tile2Build.CampReasonCode : tile2Build.QuarryReasonCode;
+        var tile0Valid = _buildMode switch
+        {
+            BuildMode.Camp => tile0.CanPlaceCamp,
+            BuildMode.Quarry => tile0.CanPlaceQuarry,
+            BuildMode.Sawmill => tile0.CanPlaceSawmill,
+            _ => false
+        };
+        var tile2Valid = _buildMode switch
+        {
+            BuildMode.Camp => tile2Build.CanPlaceCamp,
+            BuildMode.Quarry => tile2Build.CanPlaceQuarry,
+            BuildMode.Sawmill => tile2Build.CanPlaceSawmill,
+            _ => false
+        };
+        var tile0Reason = _buildMode switch
+        {
+            BuildMode.Camp => tile0.CampReasonCode,
+            BuildMode.Quarry => tile0.QuarryReasonCode,
+            BuildMode.Sawmill => tile0.SawmillReasonCode,
+            _ => ValidationReasonCode.UnknownCommand
+        };
+        var tile2Reason = _buildMode switch
+        {
+            BuildMode.Camp => tile2Build.CampReasonCode,
+            BuildMode.Quarry => tile2Build.QuarryReasonCode,
+            BuildMode.Sawmill => tile2Build.SawmillReasonCode,
+            _ => ValidationReasonCode.UnknownCommand
+        };
 
         _tile0ActionButton.Text = $"{(tile0Valid ? "[VALID]" : "[INVALID]")} {mode} on Tile 0 ({(tile0Valid ? "OK" : tile0Reason)})";
         _tile2ActionButton.Text = $"{(tile2Valid ? "[VALID]" : "[INVALID]")} {mode} on Tile 2 ({(tile2Valid ? "OK" : tile2Reason)})";

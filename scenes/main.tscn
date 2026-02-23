@@ -85,6 +85,11 @@ text = "Enter Camp Build Mode"
 layout_mode = 2
 text = "Enter Quarry Build Mode"
 
+
+[node name="EnterSawmillBuildMode" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Enter Sawmill Build Mode"
+
 [node name="CancelBuildMode" type="Button" parent="VBox/Buttons"]
 layout_mode = 2
 text = "Cancel Build Mode"

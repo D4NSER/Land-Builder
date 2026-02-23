@@ -2,6 +2,8 @@ using LandBuilder.Domain;
 
 namespace LandBuilder.Application;
 
+public sealed record BuildingContributionUiState(int BuildingId, string BuildingTypeId, int Level, int ContributionPerTick);
+
 public sealed record TileUiState(
     int TileId,
     TileStateKind State,
@@ -14,7 +16,10 @@ public sealed record TileUiState(
     string CampReasonMessage,
     bool CanPlaceQuarry,
     ValidationReasonCode QuarryReasonCode,
-    string QuarryReasonMessage);
+    string QuarryReasonMessage,
+    bool CanPlaceSawmill,
+    ValidationReasonCode SawmillReasonCode,
+    string SawmillReasonMessage);
 
 public sealed record UiProjection(
     int Coins,
@@ -24,7 +29,8 @@ public sealed record UiProjection(
     string ObjectiveProgress,
     string LastCompletionMessage,
     string LastEventMessage,
-    IReadOnlyList<TileUiState> TileStates)
+    IReadOnlyList<TileUiState> TileStates,
+    IReadOnlyList<BuildingContributionUiState> BuildingContributions)
 {
     public static UiProjection From(GameState state, IEnumerable<IDomainEvent> events)
     {
@@ -53,6 +59,7 @@ public sealed record UiProjection(
                 var expansion = DeterministicSimulator.ValidateExpansion(state, tile.TileId);
                 var camp = DeterministicSimulator.ValidatePlacement(state, "Camp", tile.TileId);
                 var quarry = DeterministicSimulator.ValidatePlacement(state, "Quarry", tile.TileId);
+                var sawmill = DeterministicSimulator.ValidatePlacement(state, "Sawmill", tile.TileId);
 
                 return new TileUiState(
                     tile.TileId,
@@ -66,19 +73,27 @@ public sealed record UiProjection(
                     camp.Message,
                     quarry.IsValid,
                     quarry.ReasonCode,
-                    quarry.Message);
+                    quarry.Message,
+                    sawmill.IsValid,
+                    sawmill.ReasonCode,
+                    sawmill.Message);
             })
+            .ToList();
+
+        var contributions = DeterministicSimulator.GetBuildingContributions(state)
+            .Select(c => new BuildingContributionUiState(c.BuildingId, c.BuildingTypeId, c.Level, c.Contribution))
             .ToList();
 
         return new UiProjection(
             Coins: state.Economy.Coins,
             BuildingsCount: state.Buildings.Count,
-            ProductionPerTick: DeterministicSimulator.GetProductionPerTick(state),
+            ProductionPerTick: contributions.Sum(x => x.ContributionPerTick),
             ActiveObjectiveId: activeObjective?.ObjectiveId ?? "All objectives complete",
             ObjectiveProgress: BuildProgressText(state, activeObjective),
             LastCompletionMessage: state.Progression.LastCompletionMessage,
             LastEventMessage: last,
-            TileStates: tiles);
+            TileStates: tiles,
+            BuildingContributions: contributions);
     }
 
     private static string BuildProgressText(GameState state, ObjectiveDefinition? objective)
