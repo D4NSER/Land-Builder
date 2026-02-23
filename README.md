@@ -23,3 +23,4 @@ Structured project documentation is being developed in stages.
 - Stage 11: Godot Desktop Integration & Smoke Exports → `docs/stage11_godot_desktop_integration_and_smoke_exports.md`
 - Stage 12: Godot Integration Fixes → `docs/stage12_godot_integration_fixes.md`
 - Land Builder Game Spec (Reset) → `docs/land_builder_game_spec.md`
+- Stage 13: Deterministic Session Continuity & Replay Safety → `docs/stage13_deterministic_session_continuity.md`

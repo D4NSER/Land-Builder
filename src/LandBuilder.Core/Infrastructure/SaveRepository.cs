@@ -38,36 +38,61 @@ public sealed class SaveRepository
             File.Move(temp, path);
     }
 
-    public GameState Load(string path)
+    public bool TryLoad(string path, out GameState state, out string error)
     {
-        if (!File.Exists(path))
-            return GameState.CreateInitial();
+        state = GameState.CreateInitial();
+        error = string.Empty;
 
+        if (!File.Exists(path))
+        {
+            error = "Save file not found.";
+            return false;
+        }
+
+        SavePayload? payload;
         try
         {
-            var payload = JsonSerializer.Deserialize<SavePayload>(File.ReadAllText(path), JsonOptions);
-            if (payload is null)
-                return GameState.CreateInitial();
-
-            if (payload.SchemaVersion != CurrentSchemaVersion)
-                return GameState.CreateInitial();
-
-            return new GameState
-            {
-                Coins = payload.Coins,
-                RngState = payload.RngState,
-                RngStep = payload.RngStep,
-                CurrentTile = payload.CurrentTile,
-                LastMessage = payload.LastMessage ?? "Loaded.",
-                Board = payload.Board?.ToDictionary(
-                    x => x.SlotIndex,
-                    x => new PlacedTile(x.TileType, x.RotationQuarterTurns)) ?? new Dictionary<int, PlacedTile>()
-            };
+            payload = JsonSerializer.Deserialize<SavePayload>(File.ReadAllText(path), JsonOptions);
         }
-        catch
+        catch (Exception ex)
         {
-            return GameState.CreateInitial();
+            error = $"Save is corrupted or unreadable: {ex.Message}";
+            return false;
         }
+
+        if (payload is null)
+        {
+            error = "Save payload is empty.";
+            return false;
+        }
+
+        if (payload.SchemaVersion != CurrentSchemaVersion)
+        {
+            error = $"Unsupported save schema: {payload.SchemaVersion}.";
+            return false;
+        }
+
+        state = new GameState
+        {
+            Coins = payload.Coins,
+            RngState = payload.RngState,
+            RngStep = payload.RngStep,
+            CurrentTile = payload.CurrentTile,
+            LastMessage = payload.LastMessage ?? "Loaded.",
+            Board = payload.Board?.ToDictionary(
+                x => x.SlotIndex,
+                x => new PlacedTile(x.TileType, x.RotationQuarterTurns)) ?? new Dictionary<int, PlacedTile>()
+        };
+
+        return true;
+    }
+
+    public GameState Load(string path)
+    {
+        if (TryLoad(path, out var state, out var error))
+            return state;
+
+        throw new InvalidDataException(error);
     }
 
     private sealed class SavePayload

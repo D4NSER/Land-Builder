@@ -38,7 +38,7 @@ public sealed record TileDefinition(
 
 public sealed record PlacedTile(TileType TileType, int RotationQuarterTurns);
 
-public sealed class GameState
+public sealed class GameState : IEquatable<GameState>
 {
     public const int BoardWidth = 3;
     public const int BoardHeight = 3;
@@ -74,5 +74,48 @@ public sealed class GameState
             LastMessage = LastMessage,
             Board = Board.ToDictionary(k => k.Key, v => v.Value)
         };
+    }
+
+    public bool Equals(GameState? other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+
+        if (Coins != other.Coins ||
+            RngState != other.RngState ||
+            RngStep != other.RngStep ||
+            CurrentTile != other.CurrentTile ||
+            LastMessage != other.LastMessage ||
+            Board.Count != other.Board.Count)
+        {
+            return false;
+        }
+
+        foreach (var kv in Board)
+        {
+            if (!other.Board.TryGetValue(kv.Key, out var value) || value != kv.Value)
+                return false;
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is GameState other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Coins);
+        hash.Add(RngState);
+        hash.Add(RngStep);
+        hash.Add(CurrentTile);
+        hash.Add(LastMessage);
+        foreach (var kv in Board.OrderBy(x => x.Key))
+        {
+            hash.Add(kv.Key);
+            hash.Add(kv.Value);
+        }
+
+        return hash.ToHashCode();
     }
 }
