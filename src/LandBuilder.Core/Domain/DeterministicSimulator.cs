@@ -312,13 +312,27 @@ public static class DeterministicSimulator
         return objective.Type switch
         {
             ObjectiveType.UnlockTileCount => state.World.Tiles.Values.Count(t => t.Ownership == TileOwnership.Unlocked) - 1 >= objective.TargetValue,
-            ObjectiveType.PlaceBuildingTypeCount => state.Buildings.Values.Count(b => b.BuildingTypeId == objective.BuildingTypeId) >= objective.TargetValue,
+            ObjectiveType.PlaceBuildingTypeCount => IsPlaceBuildingObjectiveMet(state, objective),
             ObjectiveType.LifetimeCoinsEarned => state.Economy.LifetimeCoinsEarned >= objective.TargetValue,
             ObjectiveType.UpgradeBuildingToLevelAtLeast => state.Buildings.Values.Any(b => b.BuildingTypeId == objective.BuildingTypeId && b.Level >= objective.TargetValue),
             ObjectiveType.PlaceBuildingTypeOnTile => state.Buildings.Values.Any(b => b.BuildingTypeId == objective.BuildingTypeId && b.TileId == objective.TileId),
             ObjectiveType.ProductionPerTickAtLeast => GetProductionPerTick(state) >= objective.TargetValue,
             _ => false
         };
+    }
+
+
+    private static bool IsPlaceBuildingObjectiveMet(GameState state, ObjectiveDefinition objective)
+    {
+        if (string.Equals(objective.BuildingTypeId, "MIXED_ALL", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasCamp = state.Buildings.Values.Any(b => b.BuildingTypeId == "Camp");
+            var hasQuarry = state.Buildings.Values.Any(b => b.BuildingTypeId == "Quarry");
+            var hasSawmill = state.Buildings.Values.Any(b => b.BuildingTypeId == "Sawmill");
+            return hasCamp && hasQuarry && hasSawmill;
+        }
+
+        return state.Buildings.Values.Count(b => b.BuildingTypeId == objective.BuildingTypeId) >= objective.TargetValue;
     }
 
     public static IReadOnlyList<(int BuildingId, string BuildingTypeId, int Level, int Contribution)> GetBuildingContributions(GameState state)

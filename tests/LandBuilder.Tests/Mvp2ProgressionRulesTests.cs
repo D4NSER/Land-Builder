@@ -20,7 +20,8 @@ public class Mvp2ProgressionRulesTests
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Quarry", 2)).State;
         state = DeterministicSimulator.Apply(state, new TickCommand(1)).State;
 
-        Assert.Equal(6, state.Progression.CurrentObjectiveIndex);
+        Assert.True(state.Progression.CurrentObjectiveIndex >= 6);
+        Assert.Contains("OBJ_06_REACH_PRODUCTION_THRESHOLD", state.Progression.CompletedObjectiveIds);
     }
 
     [Fact]

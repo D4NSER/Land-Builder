@@ -14,3 +14,4 @@ Structured project documentation is being developed in stages.
 - Stage 7: Production Polish & Hardening → `docs/stage7_production_polish_plan.md`
 - Stage 8A: Placement UX + Expansion Cost Scaling → `docs/stage8a_placement_and_expansion.md`
 - Stage 8B: Minimal Multi-Building Production Chain → `docs/stage8b_minimal_production_chain.md`
+- Stage 8C: Chapter 2 Objective Chain Extension → `docs/stage8c_chapter2_objectives.md`
