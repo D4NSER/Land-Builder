@@ -15,3 +15,5 @@ Structured project documentation is being developed in stages.
 - Stage 8A: Placement UX + Expansion Cost Scaling → `docs/stage8a_placement_and_expansion.md`
 - Stage 8B: Minimal Multi-Building Production Chain → `docs/stage8b_minimal_production_chain.md`
 - Stage 8C: Chapter 2 Objective Chain Extension → `docs/stage8c_chapter2_objectives.md`
+- Stage 9: Windows Dev Setup → `docs/dev_setup_windows.md`
+- Stage 9: Desktop Export Checklist → `docs/export_checklist.md`
