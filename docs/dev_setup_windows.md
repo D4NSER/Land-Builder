@@ -91,3 +91,14 @@ For this project, save names include:
 ### Tests pass in CLI but Godot fails to run scripts
 - Ensure Godot editor is pointing to installed .NET SDK.
 - Delete transient `.godot/mono` folder and reopen project to regenerate if needed.
+
+
+## Stage 11 addendum
+- Use **Godot 4.2.2-stable .NET** + **.NET SDK 8.0.x** only.
+- For full Windows C# integration workflow, failure matrix, deterministic smoke script, and required evidence bundle, see: `docs/stage11_godot_desktop_integration_and_smoke_exports.md`.
+- Quick run order:
+  1. `dotnet --version` (must be `8.0.x`)
+  2. Open `project.godot` in Godot .NET build
+  3. `Project -> Tools -> C# -> Create C# Solution` (if prompted)
+  4. `Build -> Build Project`
+  5. Run `scenes/main.tscn` and execute deterministic mini-script from Stage 11 doc.

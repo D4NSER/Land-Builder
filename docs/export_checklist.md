@@ -74,3 +74,11 @@ For each OS test run, capture:
 - All 3 desktop presets exist and export without critical errors.
 - Smoke matrix rows pass for Windows/macOS/Linux.
 - Build/test gate remains green before and after export validation.
+
+
+## Stage 11 Windows verified-export addendum
+1. Confirm Godot export templates are installed for the pinned version (`4.2.2-stable .NET`).
+2. Before export, run C# build in-editor (`Build -> Build Project`).
+3. Export using Windows preset to `builds/windows/`.
+4. Run exported `.exe` and execute the deterministic mini-script documented in `docs/stage11_godot_desktop_integration_and_smoke_exports.md`.
+5. Validate and capture artifacts: startup screenshot, post-action screenshot, save/load proof, run log snippet, and final key values (`Coins`, `CurrentObjectiveIndex`, building counts).
