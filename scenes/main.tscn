@@ -11,105 +11,74 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="GameCamera" type="Camera2D" parent="."]
-position = Vector2(640, 360)
-current = true
-
 [node name="VBox" type="VBoxContainer" parent="."]
 layout_mode = 2
-
-[node name="HotkeysLabel" type="Label" parent="VBox"]
-layout_mode = 2
-text = "Hotkeys"
-autowrap_mode = 3
 
 [node name="CoinsLabel" type="Label" parent="VBox"]
 layout_mode = 2
 text = "Coins: 0"
 
-[node name="StatsLabel" type="Label" parent="VBox"]
+[node name="CurrentTileLabel" type="Label" parent="VBox"]
 layout_mode = 2
-text = "Buildings: 0 | Production/tick: 0"
+text = "Current tile: (none)"
 
-[node name="BuildModeLabel" type="Label" parent="VBox"]
+[node name="BoardLabel" type="Label" parent="VBox"]
 layout_mode = 2
-text = "Build Mode: None"
-
-[node name="TileActionHintLabel" type="Label" parent="VBox"]
-layout_mode = 2
-text = "Tile Actions"
+text = "Board"
 autowrap_mode = 3
-
-[node name="TileStatesLabel" type="Label" parent="VBox"]
-layout_mode = 2
-text = "Tile States"
-autowrap_mode = 3
-
-[node name="ObjectiveLabel" type="Label" parent="VBox"]
-layout_mode = 2
-text = "Active Objective: -"
-
-[node name="ObjectiveProgressLabel" type="Label" parent="VBox"]
-layout_mode = 2
-text = "Progress: -"
-
-[node name="CompletionLabel" type="Label" parent="VBox"]
-layout_mode = 2
-text = "Last Completion: -"
 
 [node name="MessageLabel" type="Label" parent="VBox"]
 layout_mode = 2
 text = "Ready"
 
-[node name="NotificationsLabel" type="Label" parent="VBox"]
+[node name="Buttons" type="GridContainer" parent="VBox"]
 layout_mode = 2
-text = "Notifications:"
-autowrap_mode = 3
+columns = 3
 
-[node name="Buttons" type="VBoxContainer" parent="VBox"]
+[node name="DrawTile" type="Button" parent="VBox/Buttons"]
 layout_mode = 2
+text = "Draw Tile"
 
-[node name="ExpandTile1" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Expand Tile 1"
-
-[node name="ExpandTile2" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Expand Tile 2"
-
-[node name="EnterCampBuildMode" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Enter Camp Build Mode"
-
-[node name="EnterQuarryBuildMode" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Enter Quarry Build Mode"
-
-
-[node name="EnterSawmillBuildMode" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Enter Sawmill Build Mode"
-
-[node name="CancelBuildMode" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Cancel Build Mode"
-
-[node name="Tile0Action" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Tile 0 Action"
-
-[node name="Tile2Action" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Tile 2 Action"
-
-[node name="UpgradeBuilding1" type="Button" parent="VBox/Buttons"]
-layout_mode = 2
-text = "Upgrade Building 1"
-
-[node name="SaveButton" type="Button" parent="VBox/Buttons"]
+[node name="Save" type="Button" parent="VBox/Buttons"]
 layout_mode = 2
 text = "Save"
 
-[node name="LoadButton" type="Button" parent="VBox/Buttons"]
+[node name="Load" type="Button" parent="VBox/Buttons"]
 layout_mode = 2
 text = "Load"
+
+[node name="Place0" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 0"
+
+[node name="Place1" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 1"
+
+[node name="Place2" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 2"
+
+[node name="Place3" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 3"
+
+[node name="Place4" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 4"
+
+[node name="Place5" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 5"
+
+[node name="Place6" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 6"
+
+[node name="Place7" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 7"
+
+[node name="Place8" type="Button" parent="VBox/Buttons"]
+layout_mode = 2
+text = "Place 8"

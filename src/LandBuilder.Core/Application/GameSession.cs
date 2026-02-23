@@ -4,39 +4,35 @@ namespace LandBuilder.Application;
 
 public interface IEventSink
 {
-    void Publish(IReadOnlyList<IDomainEvent> events);
+    void Publish(IDomainEvent domainEvent);
 }
 
 public sealed class InMemoryEventSink : IEventSink
 {
     private readonly List<IDomainEvent> _events = new();
-
     public IReadOnlyList<IDomainEvent> Events => _events;
-
-    public void Publish(IReadOnlyList<IDomainEvent> events)
-    {
-        _events.AddRange(events);
-    }
-
+    public void Publish(IDomainEvent domainEvent) => _events.Add(domainEvent);
     public void Clear() => _events.Clear();
 }
 
 public sealed class GameSession
 {
-    private readonly IEventSink _eventSink;
+    private readonly DeterministicSimulator _simulator = new();
+    private readonly IEventSink _sink;
 
     public GameState State { get; private set; }
 
-    public GameSession(GameState initialState, IEventSink eventSink)
+    public GameSession(GameState initialState, IEventSink sink)
     {
         State = initialState;
-        _eventSink = eventSink;
+        _sink = sink;
     }
 
-    public void Dispatch(IGameCommand command)
+    public void IssueCommand(IGameCommand command)
     {
-        var result = DeterministicSimulator.Apply(State, command);
-        State = result.State;
-        _eventSink.Publish(result.Events);
+        var (next, events) = _simulator.Apply(State, command);
+        State = next;
+        foreach (var ev in events)
+            _sink.Publish(ev);
     }
 }

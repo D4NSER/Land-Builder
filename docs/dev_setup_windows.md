@@ -106,3 +106,11 @@ For this project, save names include:
   3. `Project -> Tools -> C# -> Create C# Solution` (if prompted)
   4. `Build -> Build Project`
   5. Run `scenes/main.tscn` and execute deterministic mini-script from Stage 11 doc.
+
+## Godot C# build workflow (Windows)
+1. Open `project.godot` in **Godot 4.2.2 .NET**.
+2. If Godot prompts, run **Project -> Tools -> C# -> Create C# Solution**.
+3. Build scripts with **Build -> Build Project**.
+4. Run `scenes/main.tscn`.
+5. If script compilation fails, open Godot **Output** panel for exact C# compile errors and fix those first.
+

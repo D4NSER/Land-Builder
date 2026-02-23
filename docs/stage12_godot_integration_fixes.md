@@ -4,11 +4,11 @@
 Godot was configured to compile/load a presentation assembly named `LandBuilder.Presentation`, but the repository did not contain a dedicated presentation C# project file in source control. This can cause inconsistent C# script build/load behavior across machines when Godot-generated project artifacts are absent or stale.
 
 ## What changed
-- Added `src/Presentation/LandBuilder.Presentation.csproj`.
+- Added root `LandBuilder.Presentation.csproj` (Godot SDK project).
   - Targets `net8.0`
   - `AssemblyName` set to `LandBuilder.Presentation`
   - `RootNamespace` set to `LandBuilder.Presentation`
-  - References `src/LandBuilder.Core/LandBuilder.Core.csproj`
+  - References `src/LandBuilder.Core/LandBuilder.Core.csproj` and compiles scripts under `src/Presentation/**/*.cs`
 - Kept `LandBuilder.Presentation.csproj` for Godot C# integration, but excluded it from `LandBuilder.sln` so CLI build/test do not require Godot SDK references.
 - Verified `scenes/main.tscn` script binding still points to `res://src/Presentation/MainController.cs` and class namespace remains `LandBuilder.Presentation.MainController`.
 
@@ -34,5 +34,5 @@ Focus checks:
 
 ## Workflow split (intended)
 - **CLI (`dotnet build/test LandBuilder.sln`)** builds only `LandBuilder.Core` + `LandBuilder.Tests`.
-- **Godot editor** builds presentation scripts from `src/Presentation/` using Godot .NET tooling.
+- **Godot editor** builds `LandBuilder.Presentation.csproj` (Godot SDK) which includes scripts from `src/Presentation/`.
 - This keeps automated test/build reproducible on machines without Godot while preserving playable editor/runtime behavior.

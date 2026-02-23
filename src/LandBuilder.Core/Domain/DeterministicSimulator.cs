@@ -1,401 +1,152 @@
 namespace LandBuilder.Domain;
 
-public enum ValidationReasonCode
+public sealed class DeterministicSimulator
 {
-    None = 0,
-    UnknownCommand = 1,
-    TileNotFound = 2,
-    TileNotUnlockable = 3,
-    NoAdjacentUnlockedTile = 4,
-    InsufficientCoins = 5,
-    UnknownBuildingType = 6,
-    BuildingTypeNotUnlocked = 7,
-    TileNotBuildable = 8,
-    TerrainMismatch = 9,
-    NoBuildingSlotsAvailable = 10,
-    BuildingNotFound = 11,
-    BuildingAlreadyMaxLevel = 12,
-    MissingPrerequisiteBuildingCount = 13
-}
-
-public enum TileStateKind
-{
-    Locked = 0,
-    Unlockable = 1,
-    Unlocked = 2,
-    Buildable = 3
-}
-
-public sealed record ExpansionValidationResult(
-    bool IsValid,
-    ValidationReasonCode ReasonCode,
-    string Message,
-    int Cost,
-    int TileDepth,
-    int NextUnlockIndex,
-    TileStateKind TileState);
-
-public sealed record PlacementValidationResult(
-    bool IsValid,
-    ValidationReasonCode ReasonCode,
-    string Message,
-    int Cost,
-    TileStateKind TileState);
-
-public static class DeterministicSimulator
-{
-    private static readonly Dictionary<string, BuildingDefinition> BuildingDefinitions = new()
+    private static readonly IReadOnlyList<TileDefinition> TileDeck = new List<TileDefinition>
     {
-        ["Camp"] = new BuildingDefinition("Camp", 11, 1, 3, new[] { 9, 15 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
-        ["Quarry"] = new BuildingDefinition("Quarry", 20, 2, 3, new[] { 13, 22 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Rocky, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
-        ["Sawmill"] = new BuildingDefinition("Sawmill", 24, 3, 3, new[] { 15, 25 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1),
-        ["Forester"] = new BuildingDefinition("Forester", 22, 2, 3, new[] { 13, 19 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Forest, RequiredBuildingTypeId: "Sawmill", RequiredBuildingCount: 1),
-        ["ClayWorks"] = new BuildingDefinition("ClayWorks", 28, 4, 3, new[] { 17, 27 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Clay, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1)
+        new(TileType.Plains, EdgeType.Field, EdgeType.Field, EdgeType.Field, EdgeType.Field, 2, 1),
+        new(TileType.Woods, EdgeType.Forest, EdgeType.Forest, EdgeType.Field, EdgeType.Field, 3, 1),
+        new(TileType.River, EdgeType.Water, EdgeType.Water, EdgeType.Field, EdgeType.Field, 3, 2),
+        new(TileType.Village, EdgeType.Town, EdgeType.Field, EdgeType.Field, EdgeType.Town, 4, 2),
+        new(TileType.Meadow, EdgeType.Field, EdgeType.Forest, EdgeType.Field, EdgeType.Forest, 3, 1),
+        new(TileType.Lake, EdgeType.Water, EdgeType.Field, EdgeType.Water, EdgeType.Field, 4, 2)
     };
 
-    public static (GameState State, IReadOnlyList<IDomainEvent> Events) Apply(GameState state, IGameCommand command)
+    public (GameState NextState, IReadOnlyList<IDomainEvent> Events) Apply(GameState state, IGameCommand command)
     {
-        var (nextState, events) = command switch
+        var working = state.Clone();
+        var events = new List<IDomainEvent>();
+
+        switch (command)
         {
-            ExpandTileCommand expand => ApplyExpand(state, expand),
-            PlaceBuildingCommand place => ApplyPlaceBuilding(state, place),
-            UpgradeBuildingCommand upgrade => ApplyUpgradeBuilding(state, upgrade),
-            TickCommand tick => ApplyTick(state, tick),
-            _ => (state, new List<IDomainEvent> { Reject(ValidationReasonCode.UnknownCommand) })
-        };
-
-        return EvaluateObjectives(nextState, events);
-    }
-
-    public static ExpansionValidationResult ValidateExpansion(GameState state, int tileId)
-    {
-        if (!state.World.Tiles.TryGetValue(tileId, out var tile))
-            return InvalidExpansion(ValidationReasonCode.TileNotFound, 0, 0, 0, TileStateKind.Locked);
-
-        var nextUnlockIndex = state.World.Tiles.Values.Count(t => t.Ownership == TileOwnership.Unlocked);
-        var tileDepth = tile.RegionDepth;
-        var cost = ComputeExpansionCost(tile.UnlockCost, tileDepth, nextUnlockIndex);
-
-        if (tile.Ownership != TileOwnership.Unlockable)
-            return InvalidExpansion(ValidationReasonCode.TileNotUnlockable, cost, tileDepth, nextUnlockIndex, ToTileStateKind(state, tile));
-
-        var hasUnlockedNeighbor = tile.AdjacentTileIds
-            .Select(id => state.World.Tiles.TryGetValue(id, out var adjacent) ? adjacent : null)
-            .Any(t => t is not null && t.Ownership == TileOwnership.Unlocked);
-
-        if (!hasUnlockedNeighbor)
-            return InvalidExpansion(ValidationReasonCode.NoAdjacentUnlockedTile, cost, tileDepth, nextUnlockIndex, ToTileStateKind(state, tile));
-
-        if (state.Economy.Coins < cost)
-            return InvalidExpansion(ValidationReasonCode.InsufficientCoins, cost, tileDepth, nextUnlockIndex, ToTileStateKind(state, tile));
-
-        return new ExpansionValidationResult(true, ValidationReasonCode.None, ValidationMessage(ValidationReasonCode.None), cost, tileDepth, nextUnlockIndex, TileStateKind.Unlockable);
-    }
-
-    public static PlacementValidationResult ValidatePlacement(GameState state, string buildingTypeId, int tileId)
-    {
-        if (!BuildingDefinitions.TryGetValue(buildingTypeId, out var definition))
-            return InvalidPlacement(ValidationReasonCode.UnknownBuildingType, 0, TileStateKind.Locked, null);
-
-        if (definition.RequiredUnlockFlag is not null && !state.Progression.UnlockFlags.Contains(definition.RequiredUnlockFlag))
-            return InvalidPlacement(ValidationReasonCode.BuildingTypeNotUnlocked, definition.BaseCost, TileStateKind.Locked, null);
-
-        if (!string.IsNullOrWhiteSpace(definition.RequiredBuildingTypeId))
-        {
-            var currentCount = state.Buildings.Values.Count(b => b.BuildingTypeId == definition.RequiredBuildingTypeId);
-            if (currentCount < definition.RequiredBuildingCount)
-                return InvalidPlacement(
-                    ValidationReasonCode.MissingPrerequisiteBuildingCount,
-                    definition.BaseCost,
-                    TileStateKind.Unlocked,
-                    $"Requires at least {definition.RequiredBuildingCount} {definition.RequiredBuildingTypeId}");
+            case DrawTileCommand:
+                ApplyDraw(working, events);
+                break;
+            case PlaceTileCommand place:
+                ApplyPlace(working, place, events);
+                break;
+            default:
+                events.Add(new CommandRejectedEvent("UNKNOWN_COMMAND", "Unsupported command."));
+                working.LastMessage = "Unsupported command.";
+                break;
         }
 
-        if (!state.World.Tiles.TryGetValue(tileId, out var tile))
-            return InvalidPlacement(ValidationReasonCode.TileNotFound, definition.BaseCost, TileStateKind.Locked, null);
-
-        var tileState = ToTileStateKind(state, tile, definition);
-        if (tile.Ownership != TileOwnership.Unlocked)
-            return InvalidPlacement(ValidationReasonCode.TileNotBuildable, definition.BaseCost, tileState, null);
-
-        if (tile.Terrain != definition.RequiredTerrain)
-            return InvalidPlacement(ValidationReasonCode.TerrainMismatch, definition.BaseCost, tileState, null);
-
-        var buildingsOnTile = state.Buildings.Values.Count(b => b.TileId == tileId);
-        if (buildingsOnTile >= tile.MaxBuildingSlots)
-            return InvalidPlacement(ValidationReasonCode.NoBuildingSlotsAvailable, definition.BaseCost, tileState, null);
-
-        if (state.Economy.Coins < definition.BaseCost)
-            return InvalidPlacement(ValidationReasonCode.InsufficientCoins, definition.BaseCost, tileState, null);
-
-        return new PlacementValidationResult(true, ValidationReasonCode.None, ValidationMessage(ValidationReasonCode.None), definition.BaseCost, TileStateKind.Buildable);
+        return (working, events);
     }
 
-    public static string ValidationMessage(ValidationReasonCode code)
+    public TileDefinition GetDefinition(TileType type) => TileDeck[(int)type];
+
+    private static ulong NextRng(ulong x)
     {
-        return code switch
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        return x * 2685821657736338717UL;
+    }
+
+    private static (int X, int Y) ToXY(int slot) => (slot % GameState.BoardWidth, slot / GameState.BoardWidth);
+
+    private static bool InBounds(int slot) => slot >= 0 && slot < GameState.BoardWidth * GameState.BoardHeight;
+
+    private static IEnumerable<(int Slot, string Dir)> NeighborSlots(int slot)
+    {
+        var (x, y) = ToXY(slot);
+        if (y > 0) yield return (slot - GameState.BoardWidth, "N");
+        if (x < GameState.BoardWidth - 1) yield return (slot + 1, "E");
+        if (y < GameState.BoardHeight - 1) yield return (slot + GameState.BoardWidth, "S");
+        if (x > 0) yield return (slot - 1, "W");
+    }
+
+    private static (EdgeType N, EdgeType E, EdgeType S, EdgeType W) RotatedEdges(TileDefinition d, int r)
+    {
+        var rot = ((r % 4) + 4) % 4;
+        return rot switch
         {
-            ValidationReasonCode.None => "Valid",
-            ValidationReasonCode.UnknownCommand => "Unknown command",
-            ValidationReasonCode.TileNotFound => "Tile not found",
-            ValidationReasonCode.TileNotUnlockable => "Tile is not unlockable",
-            ValidationReasonCode.NoAdjacentUnlockedTile => "No adjacent unlocked tile",
-            ValidationReasonCode.InsufficientCoins => "Insufficient coins",
-            ValidationReasonCode.UnknownBuildingType => "Unknown building type",
-            ValidationReasonCode.BuildingTypeNotUnlocked => "Building type not unlocked",
-            ValidationReasonCode.TileNotBuildable => "Tile is not buildable",
-            ValidationReasonCode.TerrainMismatch => "Terrain mismatch for building",
-            ValidationReasonCode.NoBuildingSlotsAvailable => "No building slots available",
-            ValidationReasonCode.BuildingNotFound => "Building not found",
-            ValidationReasonCode.BuildingAlreadyMaxLevel => "Building already max level",
-            ValidationReasonCode.MissingPrerequisiteBuildingCount => "Missing prerequisite building count",
-            _ => "Unknown validation error"
+            0 => (d.North, d.East, d.South, d.West),
+            1 => (d.West, d.North, d.East, d.South),
+            2 => (d.South, d.West, d.North, d.East),
+            _ => (d.East, d.South, d.West, d.North)
         };
     }
 
-    private static (GameState, List<IDomainEvent>) ApplyExpand(GameState state, ExpandTileCommand command)
+    private void ApplyDraw(GameState state, List<IDomainEvent> events)
     {
-        var validation = ValidateExpansion(state, command.TileId);
-        if (!validation.IsValid)
-            return (state, new List<IDomainEvent> { Reject(validation.ReasonCode) });
+        var rng = NextRng(state.RngState);
+        var index = (int)(rng % (ulong)TileDeck.Count);
+        var tile = TileDeck[index].TileType;
 
-        var mutableTiles = state.World.Tiles.ToDictionary(pair => pair.Key, pair => pair.Value);
-        var tile = mutableTiles[command.TileId];
-        mutableTiles[command.TileId] = tile with { Ownership = TileOwnership.Unlocked };
+        state.RngState = rng;
+        state.RngStep += 1;
+        state.CurrentTile = tile;
+        state.LastMessage = $"Drew {tile}.";
 
-        foreach (var neighborId in tile.AdjacentTileIds)
+        events.Add(new TileDrawnEvent(tile));
+    }
+
+    private void ApplyPlace(GameState state, PlaceTileCommand place, List<IDomainEvent> events)
+    {
+        if (!InBounds(place.SlotIndex))
         {
-            if (!mutableTiles.TryGetValue(neighborId, out var neighbor)) continue;
-            if (neighbor.Ownership == TileOwnership.Locked)
-                mutableTiles[neighborId] = neighbor with { Ownership = TileOwnership.Unlockable };
+            Reject(state, events, place.SlotIndex, PlacementRejectionReason.OutOfBounds, "Slot is outside the board.");
+            return;
         }
 
-        var nextState = state with
+        if (state.CurrentTile is null)
         {
-            World = new WorldState(mutableTiles),
-            Economy = state.Economy with { Coins = state.Economy.Coins - validation.Cost }
-        };
+            Reject(state, events, place.SlotIndex, PlacementRejectionReason.NoTileInHand, "Draw a tile before placement.");
+            return;
+        }
 
-        return (nextState, new List<IDomainEvent>
+        if (state.Board.ContainsKey(place.SlotIndex))
         {
-            new CurrencySpentEvent(validation.Cost, nextState.Economy.Coins),
-            new TileUnlockedEvent(command.TileId)
-        });
-    }
+            Reject(state, events, place.SlotIndex, PlacementRejectionReason.SlotOccupied, "Slot already has a tile.");
+            return;
+        }
 
-    private static (GameState, List<IDomainEvent>) ApplyPlaceBuilding(GameState state, PlaceBuildingCommand command)
-    {
-        var validation = ValidatePlacement(state, command.BuildingTypeId, command.TileId);
-        if (!validation.IsValid)
-            return (state, new List<IDomainEvent> { Reject(validation.ReasonCode) });
+        var def = GetDefinition(state.CurrentTile.Value);
+        var edges = RotatedEdges(def, place.RotationQuarterTurns);
 
-        var nextBuildings = state.Buildings.ToDictionary(x => x.Key, x => x.Value);
-        var buildingId = state.NextBuildingId;
-        nextBuildings[buildingId] = new BuildingState(buildingId, command.BuildingTypeId, command.TileId, 1);
-
-        var nextState = state with
+        var matches = 0;
+        foreach (var (nSlot, dir) in NeighborSlots(place.SlotIndex))
         {
-            Buildings = nextBuildings,
-            NextBuildingId = buildingId + 1,
-            Economy = state.Economy with { Coins = state.Economy.Coins - validation.Cost }
-        };
+            if (!state.Board.TryGetValue(nSlot, out var neighbor))
+                continue;
 
-        return (nextState, new List<IDomainEvent>
-        {
-            new CurrencySpentEvent(validation.Cost, nextState.Economy.Coins),
-            new BuildingPlacedEvent(buildingId, command.BuildingTypeId, command.TileId)
-        });
-    }
+            var nDef = GetDefinition(neighbor.TileType);
+            var nEdges = RotatedEdges(nDef, neighbor.RotationQuarterTurns);
 
-    private static (GameState, List<IDomainEvent>) ApplyUpgradeBuilding(GameState state, UpgradeBuildingCommand command)
-    {
-        if (!state.Buildings.TryGetValue(command.BuildingId, out var building))
-            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.BuildingNotFound) });
-
-        if (!BuildingDefinitions.TryGetValue(building.BuildingTypeId, out var definition))
-            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.UnknownBuildingType) });
-
-        if (building.Level >= definition.MaxLevel)
-            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.BuildingAlreadyMaxLevel) });
-
-        var cost = definition.UpgradeCosts[building.Level - 1];
-        if (state.Economy.Coins < cost)
-            return (state, new List<IDomainEvent> { Reject(ValidationReasonCode.InsufficientCoins) });
-
-        var nextBuildings = state.Buildings.ToDictionary(x => x.Key, x => x.Value);
-        var upgraded = building with { Level = building.Level + 1 };
-        nextBuildings[building.BuildingId] = upgraded;
-
-        var nextState = state with
-        {
-            Buildings = nextBuildings,
-            Economy = state.Economy with { Coins = state.Economy.Coins - cost }
-        };
-
-        return (nextState, new List<IDomainEvent>
-        {
-            new CurrencySpentEvent(cost, nextState.Economy.Coins),
-            new BuildingUpgradedEvent(upgraded.BuildingId, upgraded.Level)
-        });
-    }
-
-    private static (GameState, List<IDomainEvent>) ApplyTick(GameState state, TickCommand command)
-    {
-        var sanitizedStepCount = command.Steps < 1 ? 1 : command.Steps;
-        var gain = GetProductionPerTick(state) * sanitizedStepCount;
-
-        var nextState = state with
-        {
-            Economy = state.Economy with
+            var compatible = dir switch
             {
-                Coins = state.Economy.Coins + gain,
-                LifetimeCoinsEarned = state.Economy.LifetimeCoinsEarned + gain
-            }
-        };
-
-        return (nextState, new List<IDomainEvent>
-        {
-            new TickProcessedEvent(sanitizedStepCount),
-            new CurrencyGainedEvent(gain, nextState.Economy.Coins)
-        });
-    }
-
-    private static (GameState, IReadOnlyList<IDomainEvent>) EvaluateObjectives(GameState state, List<IDomainEvent> events)
-    {
-        var nextState = state;
-        var mutableEvents = new List<IDomainEvent>(events);
-
-        while (nextState.Progression.CurrentObjectiveIndex < nextState.ObjectiveDefinitions.Count)
-        {
-            var objective = nextState.ObjectiveDefinitions[nextState.Progression.CurrentObjectiveIndex];
-            if (!IsObjectiveMet(nextState, objective)) break;
-
-            var unlockFlags = nextState.Progression.UnlockFlags.ToHashSet();
-            if (!string.IsNullOrWhiteSpace(objective.RewardUnlockFlag))
-            {
-                unlockFlags.Add(objective.RewardUnlockFlag!);
-                mutableEvents.Add(new UnlockFlagGrantedEvent(objective.RewardUnlockFlag!));
-            }
-
-            var completed = nextState.Progression.CompletedObjectiveIds.ToList();
-            completed.Add(objective.ObjectiveId);
-            var message = $"Objective complete: {objective.ObjectiveId}";
-
-            var progression = nextState.Progression with
-            {
-                CurrentObjectiveIndex = nextState.Progression.CurrentObjectiveIndex + 1,
-                CompletedObjectiveIds = completed,
-                UnlockFlags = unlockFlags,
-                LastCompletedObjectiveId = objective.ObjectiveId,
-                LastCompletionMessage = message
+                "N" => edges.N == nEdges.S,
+                "E" => edges.E == nEdges.W,
+                "S" => edges.S == nEdges.N,
+                _ => edges.W == nEdges.E
             };
 
-            nextState = nextState with
+            if (!compatible)
             {
-                Progression = progression,
-                Economy = nextState.Economy with
-                {
-                    Coins = nextState.Economy.Coins + objective.RewardCoins,
-                    LifetimeCoinsEarned = nextState.Economy.LifetimeCoinsEarned + objective.RewardCoins
-                }
-            };
+                Reject(state, events, place.SlotIndex, PlacementRejectionReason.IncompatibleAdjacent, "Adjacent edges are incompatible.");
+                return;
+            }
 
-            if (objective.RewardCoins > 0)
-                mutableEvents.Add(new CurrencyGainedEvent(objective.RewardCoins, nextState.Economy.Coins));
-
-            mutableEvents.Add(new ObjectiveCompletedEvent(objective.ObjectiveId, message));
+            matches += 1;
         }
 
-        return (nextState, mutableEvents);
+        var gain = def.BaseCoins + (matches * def.MatchBonusPerEdge);
+        state.Board[place.SlotIndex] = new PlacedTile(state.CurrentTile.Value, ((place.RotationQuarterTurns % 4) + 4) % 4);
+        state.Coins += gain;
+        var placedType = state.CurrentTile.Value;
+        state.CurrentTile = null;
+        state.LastMessage = $"Placed {placedType} on slot {place.SlotIndex}. +{gain} coins.";
+
+        events.Add(new TilePlacedEvent(place.SlotIndex, placedType, ((place.RotationQuarterTurns % 4) + 4) % 4, gain));
+        events.Add(new CoinsEarnedEvent(gain, "tile_place"));
     }
 
-    private static bool IsObjectiveMet(GameState state, ObjectiveDefinition objective)
+    private static void Reject(GameState state, List<IDomainEvent> events, int slot, PlacementRejectionReason reason, string message)
     {
-        return objective.Type switch
-        {
-            ObjectiveType.UnlockTileCount => state.World.Tiles.Values.Count(t => t.Ownership == TileOwnership.Unlocked) - 1 >= objective.TargetValue,
-            ObjectiveType.PlaceBuildingTypeCount => IsPlaceBuildingObjectiveMet(state, objective),
-            ObjectiveType.LifetimeCoinsEarned => state.Economy.LifetimeCoinsEarned >= objective.TargetValue,
-            ObjectiveType.UpgradeBuildingToLevelAtLeast => state.Buildings.Values.Any(b => b.BuildingTypeId == objective.BuildingTypeId && b.Level >= objective.TargetValue),
-            ObjectiveType.PlaceBuildingTypeOnTile => state.Buildings.Values.Any(b => b.BuildingTypeId == objective.BuildingTypeId && b.TileId == objective.TileId),
-            ObjectiveType.ProductionPerTickAtLeast => GetProductionPerTick(state) >= objective.TargetValue,
-            _ => false
-        };
+        state.LastMessage = message;
+        events.Add(new PlacementRejectedEvent(slot, reason, message));
+        events.Add(new CommandRejectedEvent(reason.ToString().ToUpperInvariant(), message));
     }
-
-
-    private static bool IsPlaceBuildingObjectiveMet(GameState state, ObjectiveDefinition objective)
-    {
-        if (string.Equals(objective.BuildingTypeId, "MIXED_ALL", StringComparison.OrdinalIgnoreCase))
-        {
-            var hasCamp = state.Buildings.Values.Any(b => b.BuildingTypeId == "Camp");
-            var hasQuarry = state.Buildings.Values.Any(b => b.BuildingTypeId == "Quarry");
-            var hasSawmill = state.Buildings.Values.Any(b => b.BuildingTypeId == "Sawmill");
-            return hasCamp && hasQuarry && hasSawmill;
-        }
-
-        return state.Buildings.Values.Count(b => b.BuildingTypeId == objective.BuildingTypeId) >= objective.TargetValue;
-    }
-
-    public static IReadOnlyList<(int BuildingId, string BuildingTypeId, int Level, int Contribution)> GetBuildingContributions(GameState state)
-    {
-        return state.Buildings.Values
-            .OrderBy(b => b.BuildingId)
-            .Select(b =>
-            {
-                var contribution = BuildingDefinitions.TryGetValue(b.BuildingTypeId, out var def)
-                    ? def.BaseProductionPerTick * b.Level
-                    : 0;
-                return (b.BuildingId, b.BuildingTypeId, b.Level, contribution);
-            })
-            .ToList();
-    }
-
-    public static int GetProductionPerTick(GameState state)
-    {
-        return GetBuildingContributions(state).Sum(x => x.Contribution);
-    }
-
-    private static int ComputeExpansionCost(int baseUnlockCost, int tileDepth, int nextUnlockIndex)
-    {
-        const int depthStep = 2;
-        const int indexStep = 1;
-
-        var indexPremium = Math.Max(0, nextUnlockIndex - 1) * indexStep;
-        var depthPremium = Math.Max(0, tileDepth) * depthStep;
-        return baseUnlockCost + depthPremium + indexPremium;
-    }
-
-    private static TileStateKind ToTileStateKind(GameState state, TileState tile, BuildingDefinition? definition = null)
-    {
-        return tile.Ownership switch
-        {
-            TileOwnership.Locked => TileStateKind.Locked,
-            TileOwnership.Unlockable => TileStateKind.Unlockable,
-            TileOwnership.Unlocked when definition is null => TileStateKind.Unlocked,
-            TileOwnership.Unlocked when definition.RequiredTerrain != tile.Terrain => TileStateKind.Unlocked,
-            TileOwnership.Unlocked when state.Buildings.Values.Count(b => b.TileId == tile.TileId) >= tile.MaxBuildingSlots => TileStateKind.Unlocked,
-            TileOwnership.Unlocked => TileStateKind.Buildable,
-            _ => TileStateKind.Locked
-        };
-    }
-
-    private static CommandRejectedEvent Reject(ValidationReasonCode code) => new(code, ValidationMessage(code));
-
-    private static ExpansionValidationResult InvalidExpansion(ValidationReasonCode code, int cost, int depth, int nextUnlockIndex, TileStateKind tileState)
-        => new(false, code, ValidationMessage(code), cost, depth, nextUnlockIndex, tileState);
-
-    private static PlacementValidationResult InvalidPlacement(ValidationReasonCode code, int cost, TileStateKind tileState, string? overrideMessage)
-        => new(false, code, overrideMessage ?? ValidationMessage(code), cost, tileState);
-
-    private sealed record BuildingDefinition(
-        string BuildingTypeId,
-        int BaseCost,
-        int BaseProductionPerTick,
-        int MaxLevel,
-        int[] UpgradeCosts,
-        string? RequiredUnlockFlag,
-        TerrainType RequiredTerrain,
-        string? RequiredBuildingTypeId,
-        int RequiredBuildingCount);
 }

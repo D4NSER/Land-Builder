@@ -18,9 +18,4 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\LandBuilder.Core\LandBuilder.Core.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <None Include="..\..\data\objectives\mvp2_objectives.json" Link="data\objectives\mvp2_objectives.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="fixtures\saves\v2_mvp1_save.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 </Project>

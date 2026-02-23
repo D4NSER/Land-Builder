@@ -22,3 +22,4 @@ Structured project documentation is being developed in stages.
 - Stage 10C: Economy Pacing + Objective Continuity (Deterministic Tuning) → `docs/stage10c_economy_pacing_and_continuity.md`
 - Stage 11: Godot Desktop Integration & Smoke Exports → `docs/stage11_godot_desktop_integration_and_smoke_exports.md`
 - Stage 12: Godot Integration Fixes → `docs/stage12_godot_integration_fixes.md`
+- Land Builder Game Spec (Reset) → `docs/land_builder_game_spec.md`

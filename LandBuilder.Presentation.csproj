@@ -1,0 +1,17 @@
+<Project Sdk="Godot.NET.Sdk/4.2.2">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AssemblyName>LandBuilder.Presentation</AssemblyName>
+    <RootNamespace>LandBuilder.Presentation</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/Presentation/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="src/LandBuilder.Core/LandBuilder.Core.csproj" />
+  </ItemGroup>
+</Project>
