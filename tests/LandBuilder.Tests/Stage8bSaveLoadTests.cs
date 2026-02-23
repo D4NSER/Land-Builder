@@ -29,16 +29,25 @@ public class Stage8bSaveLoadTests
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Quarry", 2)).State;
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Sawmill", 1)).State;
 
+        // Resolve any immediately pending progression reward before save so post-load tick delta
+        // assertions reflect tick production only (no objective reward side-effects).
+        state = DeterministicSimulator.Apply(state, new TickCommand(2)).State;
+
         var productionBefore = DeterministicSimulator.GetProductionPerTick(state);
         repo.Save(savePath, state);
 
         var loaded = repo.Load(savePath);
         var productionAfterLoad = DeterministicSimulator.GetProductionPerTick(loaded);
-        var afterTick = DeterministicSimulator.Apply(loaded, new TickCommand(10)).State;
+
+        var afterSingleTick = DeterministicSimulator.Apply(loaded, new TickCommand(1)).State;
+        var afterTenTicks = DeterministicSimulator.Apply(loaded, new TickCommand(10)).State;
 
         Assert.Equal(3, loaded.Buildings.Count);
+        Assert.Equal(state.Progression.CurrentObjectiveIndex, loaded.Progression.CurrentObjectiveIndex);
+        Assert.Equal(state.Economy.LifetimeCoinsEarned, loaded.Economy.LifetimeCoinsEarned);
         Assert.Equal(productionBefore, productionAfterLoad);
-        Assert.Equal(loaded.Economy.Coins + (productionAfterLoad * 10), afterTick.Economy.Coins);
+        Assert.Equal(loaded.Economy.Coins + productionAfterLoad, afterSingleTick.Economy.Coins);
+        Assert.Equal(loaded.Economy.Coins + (productionAfterLoad * 10), afterTenTicks.Economy.Coins);
 
         File.Delete(savePath);
     }
