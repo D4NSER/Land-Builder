@@ -48,7 +48,9 @@ public static class DeterministicSimulator
     {
         ["Camp"] = new BuildingDefinition("Camp", 12, 1, 3, new[] { 8, 14 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
         ["Quarry"] = new BuildingDefinition("Quarry", 18, 2, 3, new[] { 12, 20 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Rocky, RequiredBuildingTypeId: null, RequiredBuildingCount: 0),
-        ["Sawmill"] = new BuildingDefinition("Sawmill", 22, 3, 3, new[] { 14, 24 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1)
+        ["Sawmill"] = new BuildingDefinition("Sawmill", 22, 3, 3, new[] { 14, 24 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Grass, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1),
+        ["Forester"] = new BuildingDefinition("Forester", 20, 2, 3, new[] { 12, 18 }, RequiredUnlockFlag: null, RequiredTerrain: TerrainType.Forest, RequiredBuildingTypeId: "Sawmill", RequiredBuildingCount: 1),
+        ["ClayWorks"] = new BuildingDefinition("ClayWorks", 26, 4, 3, new[] { 16, 26 }, RequiredUnlockFlag: "UNLOCK_QUARRY", RequiredTerrain: TerrainType.Clay, RequiredBuildingTypeId: "Quarry", RequiredBuildingCount: 1)
     };
 
     public static (GameState State, IReadOnlyList<IDomainEvent> Events) Apply(GameState state, IGameCommand command)
@@ -71,7 +73,7 @@ public static class DeterministicSimulator
             return InvalidExpansion(ValidationReasonCode.TileNotFound, 0, 0, 0, TileStateKind.Locked);
 
         var nextUnlockIndex = state.World.Tiles.Values.Count(t => t.Ownership == TileOwnership.Unlocked);
-        var tileDepth = ComputeTileDepth(state.World, tileId);
+        var tileDepth = tile.RegionDepth;
         var cost = ComputeExpansionCost(tile.UnlockCost, tileDepth, nextUnlockIndex);
 
         if (tile.Ownership != TileOwnership.Unlockable)
@@ -356,34 +358,12 @@ public static class DeterministicSimulator
 
     private static int ComputeExpansionCost(int baseUnlockCost, int tileDepth, int nextUnlockIndex)
     {
-        var indexPremium = Math.Max(0, nextUnlockIndex - 2) * 4;
-        var depthPremium = Math.Max(0, tileDepth - 2) * 3;
-        return baseUnlockCost + indexPremium + depthPremium;
-    }
+        const int depthStep = 1;
+        const int indexStep = 1;
 
-    private static int ComputeTileDepth(WorldState world, int tileId)
-    {
-        if (tileId == 0) return 0;
-
-        var visited = new HashSet<int> { 0 };
-        var queue = new Queue<(int TileId, int Depth)>();
-        queue.Enqueue((0, 0));
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-            if (!world.Tiles.TryGetValue(current.TileId, out var tile))
-                continue;
-
-            foreach (var adjacent in tile.AdjacentTileIds.OrderBy(x => x))
-            {
-                if (!visited.Add(adjacent)) continue;
-                if (adjacent == tileId) return current.Depth + 1;
-                queue.Enqueue((adjacent, current.Depth + 1));
-            }
-        }
-
-        return 0;
+        var indexPremium = Math.Max(0, nextUnlockIndex - 1) * indexStep;
+        var depthPremium = Math.Max(0, tileDepth) * depthStep;
+        return baseUnlockCost + depthPremium + indexPremium;
     }
 
     private static TileStateKind ToTileStateKind(GameState state, TileState tile, BuildingDefinition? definition = null)

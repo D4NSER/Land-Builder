@@ -25,6 +25,7 @@ public class Mvp0SaveRoundTripTests
         Assert.Equal(state.Economy.Coins, loaded.Economy.Coins);
         Assert.Equal(state.Buildings.Count, loaded.Buildings.Count);
         Assert.Equal(state.Progression.CurrentObjectiveIndex, loaded.Progression.CurrentObjectiveIndex);
+        Assert.Equal(state.World.Tiles[8].RegionDepth, loaded.World.Tiles[8].RegionDepth);
         Assert.Equal(3, loaded.Meta.SchemaVersion);
 
         File.Delete(savePath);

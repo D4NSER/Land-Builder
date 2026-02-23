@@ -15,7 +15,7 @@ public class Stage8aExpansionCostTests
     public void ExpansionPreviewAndActualCost_MatchAndScaleMonotonically()
     {
         var objectives = new ObjectiveDefinitionLoader().Load(TestPaths.ObjectivesJson);
-        var state = GameState.CreateInitial(objectives);
+        var state = GameState.CreateInitial(objectives) with { Economy = new EconomyState(200, 0) };
 
         var preview1 = DeterministicSimulator.ValidateExpansion(state, 1);
         Assert.True(preview1.IsValid);
@@ -25,13 +25,22 @@ public class Stage8aExpansionCostTests
         Assert.Equal(preview1.Cost, spent1.Amount);
 
         state = afterExpand1.State;
-        var preview2 = DeterministicSimulator.ValidateExpansion(state, 2);
+        var preview2 = DeterministicSimulator.ValidateExpansion(state, 4);
         Assert.True(preview2.IsValid);
         Assert.True(preview2.Cost >= preview1.Cost);
 
-        var afterExpand2 = DeterministicSimulator.Apply(state, new ExpandTileCommand(2));
+        var afterExpand2 = DeterministicSimulator.Apply(state, new ExpandTileCommand(4));
         var spent2 = Assert.IsType<CurrencySpentEvent>(afterExpand2.Events.First(e => e is CurrencySpentEvent));
         Assert.Equal(preview2.Cost, spent2.Amount);
+
+        state = afterExpand2.State;
+        var preview3 = DeterministicSimulator.ValidateExpansion(state, 7);
+        Assert.True(preview3.IsValid);
+        Assert.True(preview3.Cost >= preview2.Cost);
+
+        var afterExpand3 = DeterministicSimulator.Apply(state, new ExpandTileCommand(7));
+        var spent3 = Assert.IsType<CurrencySpentEvent>(afterExpand3.Events.First(e => e is CurrencySpentEvent));
+        Assert.Equal(preview3.Cost, spent3.Amount);
     }
 
     [Fact]
@@ -43,7 +52,7 @@ public class Stage8aExpansionCostTests
             new ExpandTileCommand(1),
             new PlaceBuildingCommand("Camp", 0),
             new TickCommand(4),
-            new ExpandTileCommand(2),
+            new ExpandTileCommand(4),
             new TickCommand(3)
         };
 
@@ -64,14 +73,16 @@ public class Stage8aExpansionCostTests
 
         var state = GameState.CreateInitial(objectives);
         state = DeterministicSimulator.Apply(state, new ExpandTileCommand(1)).State;
+        state = DeterministicSimulator.Apply(state, new ExpandTileCommand(4)).State;
 
-        var previewBefore = DeterministicSimulator.ValidateExpansion(state, 2);
+        var previewBefore = DeterministicSimulator.ValidateExpansion(state, 7);
         repo.Save(savePath, state);
         var loaded = repo.Load(savePath);
-        var previewAfter = DeterministicSimulator.ValidateExpansion(loaded, 2);
+        var previewAfter = DeterministicSimulator.ValidateExpansion(loaded, 7);
 
         Assert.Equal(TileOwnership.Unlocked, loaded.World.Tiles[1].Ownership);
-        Assert.Equal(TileOwnership.Unlockable, loaded.World.Tiles[2].Ownership);
+        Assert.Equal(TileOwnership.Unlocked, loaded.World.Tiles[4].Ownership);
+        Assert.Equal(3, loaded.World.Tiles[7].RegionDepth);
         Assert.Equal(previewBefore.Cost, previewAfter.Cost);
 
         File.Delete(savePath);

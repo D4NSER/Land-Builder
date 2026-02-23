@@ -33,7 +33,8 @@ public sealed class SaveRepository
                 UnlockCost = t.UnlockCost,
                 AdjacentTileIds = t.AdjacentTileIds,
                 MaxBuildingSlots = t.MaxBuildingSlots,
-                Terrain = (int)t.Terrain
+                Terrain = (int)t.Terrain,
+                RegionDepth = t.RegionDepth
             }).ToList(),
             Buildings = state.Buildings.Values.Select(b => new SaveBuilding
             {
@@ -143,7 +144,7 @@ public sealed class SaveRepository
     {
         var tiles = payload.Tiles.ToDictionary(
             t => t.TileId,
-            t => new TileState(t.TileId, (TileOwnership)t.Ownership, t.UnlockCost, t.AdjacentTileIds, t.MaxBuildingSlots, (TerrainType)t.Terrain));
+            t => new TileState(t.TileId, (TileOwnership)t.Ownership, t.UnlockCost, t.AdjacentTileIds, t.MaxBuildingSlots, (TerrainType)t.Terrain, t.RegionDepth));
 
         var buildings = payload.Buildings.ToDictionary(
             b => b.BuildingId,
@@ -189,6 +190,7 @@ public sealed class SaveRepository
         public int[] AdjacentTileIds { get; set; } = Array.Empty<int>();
         public int MaxBuildingSlots { get; set; } = 1;
         public int Terrain { get; set; }
+        public int RegionDepth { get; set; }
     }
 
     private sealed class SaveBuilding
