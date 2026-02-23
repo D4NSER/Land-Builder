@@ -1,0 +1,99 @@
+{
+  "objectives": [
+    {
+      "objectiveId": "OBJ_01_UNLOCK_FIRST_TILE",
+      "type": "UnlockTileCount",
+      "targetValue": 1,
+      "rewardCoins": 5,
+      "rewardUnlockFlag": "UNLOCK_CAMP"
+    },
+    {
+      "objectiveId": "OBJ_02_PLACE_FIRST_CAMP",
+      "type": "PlaceBuildingTypeCount",
+      "targetValue": 1,
+      "buildingTypeId": "Camp",
+      "rewardCoins": 5
+    },
+    {
+      "objectiveId": "OBJ_03_EARN_COINS",
+      "type": "LifetimeCoinsEarned",
+      "targetValue": 20,
+      "rewardCoins": 8
+    },
+    {
+      "objectiveId": "OBJ_04_UPGRADE_CAMP_L2",
+      "type": "UpgradeBuildingToLevelAtLeast",
+      "targetValue": 2,
+      "buildingTypeId": "Camp",
+      "rewardCoins": 5,
+      "rewardUnlockFlag": "UNLOCK_QUARRY"
+    },
+    {
+      "objectiveId": "OBJ_05_PLACE_QUARRY_ON_ROCKY",
+      "type": "PlaceBuildingTypeOnTile",
+      "targetValue": 1,
+      "buildingTypeId": "Quarry",
+      "tileId": 2,
+      "rewardCoins": 10
+    },
+    {
+      "objectiveId": "OBJ_06_REACH_PRODUCTION_THRESHOLD",
+      "type": "ProductionPerTickAtLeast",
+      "targetValue": 4,
+      "rewardCoins": 15
+    },
+    {
+      "objectiveId": "OBJ_07_CH2_UNLOCK_ALL_TILES",
+      "type": "UnlockTileCount",
+      "targetValue": 2,
+      "rewardCoins": 5
+    },
+    {
+      "objectiveId": "OBJ_08_CH2_KEEP_ONE_CAMP",
+      "type": "PlaceBuildingTypeCount",
+      "targetValue": 1,
+      "buildingTypeId": "Camp",
+      "rewardCoins": 5
+    },
+    {
+      "objectiveId": "OBJ_09_CH2_KEEP_ONE_QUARRY",
+      "type": "PlaceBuildingTypeCount",
+      "targetValue": 1,
+      "buildingTypeId": "Quarry",
+      "rewardCoins": 5
+    },
+    {
+      "objectiveId": "OBJ_10_CH2_BUILD_SAWMILL",
+      "type": "PlaceBuildingTypeCount",
+      "targetValue": 1,
+      "buildingTypeId": "Sawmill",
+      "rewardCoins": 8
+    },
+    {
+      "objectiveId": "OBJ_11_CH2_UPGRADE_SAWMILL_L2",
+      "type": "UpgradeBuildingToLevelAtLeast",
+      "targetValue": 2,
+      "buildingTypeId": "Sawmill",
+      "rewardCoins": 8
+    },
+    {
+      "objectiveId": "OBJ_12_CH2_LIFETIME_60",
+      "type": "LifetimeCoinsEarned",
+      "targetValue": 60,
+      "rewardCoins": 8
+    },
+    {
+      "objectiveId": "OBJ_13_CH2_PRODUCTION_9",
+      "type": "ProductionPerTickAtLeast",
+      "targetValue": 9,
+      "rewardCoins": 10
+    },
+    {
+      "objectiveId": "OBJ_14_CH2_MIXED_ONE_EACH",
+      "type": "PlaceBuildingTypeCount",
+      "targetValue": 3,
+      "buildingTypeId": "MIXED_ALL",
+      "rewardCoins": 12
+    }
+  ]
+}
