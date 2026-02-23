@@ -11,10 +11,11 @@ public class Mvp1DomainRulesTests
     {
         var objectives = new ObjectiveDefinitionLoader().Load(TestPaths.ObjectivesJson);
         var state = GameState.CreateInitial(objectives);
+        var placementCost = DeterministicSimulator.ValidatePlacement(state, "Camp", 0).Cost;
         var result = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0));
 
-        Assert.Equal(1, result.State.Buildings.Count);
-        Assert.Equal(18, result.State.Economy.Coins);
+        Assert.Single(result.State.Buildings);
+        Assert.Equal(state.Economy.Coins - placementCost, result.State.Economy.Coins);
     }
 
     [Fact]

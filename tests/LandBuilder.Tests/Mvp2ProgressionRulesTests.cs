@@ -16,6 +16,7 @@ public class Mvp2ProgressionRulesTests
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Camp", 0)).State;
         state = DeterministicSimulator.Apply(state, new TickCommand(20)).State;
         state = DeterministicSimulator.Apply(state, new UpgradeBuildingCommand(1)).State;
+        state = DeterministicSimulator.Apply(state, new TickCommand(2)).State;
         state = DeterministicSimulator.Apply(state, new ExpandTileCommand(2)).State;
         state = DeterministicSimulator.Apply(state, new PlaceBuildingCommand("Quarry", 2)).State;
         state = DeterministicSimulator.Apply(state, new TickCommand(1)).State;

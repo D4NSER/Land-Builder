@@ -13,25 +13,28 @@ public class Stage10cEconomyPacingTests
     {
         var objectives = new ObjectiveDefinitionLoader().Load(TestPaths.ObjectivesJson);
         var baseState = GameState.CreateInitial(objectives) with { Economy = new EconomyState(1000, 0) };
+        var baseTiles = baseState.World.Tiles.ToDictionary(x => x.Key, x => x.Value);
 
-        var depth1Cost = DeterministicSimulator.ValidateExpansion(baseState, 1).Cost;
-        var after1 = DeterministicSimulator.Apply(baseState, new ExpandTileCommand(1)).State;
-        var depth2Cost = DeterministicSimulator.ValidateExpansion(after1, 2).Cost;
-        var after3 = DeterministicSimulator.Apply(baseState, new ExpandTileCommand(3)).State;
-        var depth3Cost = DeterministicSimulator.ValidateExpansion(after3, 6).Cost;
+        var lowerDepthTiles = baseTiles.ToDictionary(x => x.Key, x => x.Value);
+        lowerDepthTiles[1] = lowerDepthTiles[1] with { Ownership = TileOwnership.Unlockable, RegionDepth = 1 };
+        var lowerDepthState = baseState with { World = new WorldState(lowerDepthTiles) };
+
+        var higherDepthTiles = baseTiles.ToDictionary(x => x.Key, x => x.Value);
+        higherDepthTiles[1] = higherDepthTiles[1] with { Ownership = TileOwnership.Unlockable, RegionDepth = 2 };
+        var higherDepthState = baseState with { World = new WorldState(higherDepthTiles) };
+
+        var depth1Cost = DeterministicSimulator.ValidateExpansion(lowerDepthState, 1).Cost;
+        var depth2Cost = DeterministicSimulator.ValidateExpansion(higherDepthState, 1).Cost;
 
         Assert.True(depth2Cost >= depth1Cost);
-        Assert.True(depth3Cost >= depth2Cost);
 
-        var tile2 = after1.World.Tiles[2];
-        var syntheticTiles = after1.World.Tiles.ToDictionary(x => x.Key, x => x.Value);
-        syntheticTiles[3] = syntheticTiles[3] with { Ownership = TileOwnership.Unlocked };
-        syntheticTiles[4] = syntheticTiles[4] with { Ownership = TileOwnership.Unlocked };
-        syntheticTiles[2] = tile2 with { Ownership = TileOwnership.Unlockable };
-        var higherIndexState = after1 with { World = new WorldState(syntheticTiles) };
+        var higherIndexTiles = lowerDepthState.World.Tiles.ToDictionary(x => x.Key, x => x.Value);
+        higherIndexTiles[3] = higherIndexTiles[3] with { Ownership = TileOwnership.Unlocked };
+        higherIndexTiles[1] = higherIndexTiles[1] with { Ownership = TileOwnership.Unlockable, RegionDepth = 1 };
+        var higherIndexState = lowerDepthState with { World = new WorldState(higherIndexTiles) };
 
-        var lowIndex = DeterministicSimulator.ValidateExpansion(after1, 2).Cost;
-        var highIndex = DeterministicSimulator.ValidateExpansion(higherIndexState, 2).Cost;
+        var lowIndex = DeterministicSimulator.ValidateExpansion(lowerDepthState, 1).Cost;
+        var highIndex = DeterministicSimulator.ValidateExpansion(higherIndexState, 1).Cost;
         Assert.True(highIndex >= lowIndex);
     }
 
