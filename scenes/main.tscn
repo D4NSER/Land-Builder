@@ -1,84 +1,295 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://src/Presentation/MainController.cs" id="1"]
 
-[node name="Main" type="Control"]
+[sub_resource type="Environment" id="1"]
+background_mode = 1
+background_color = Color(0.70, 0.86, 0.90, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.93, 0.93, 0.95, 1)
+ambient_light_energy = 0.48
+tonemap_mode = 2
+tonemap_exposure = 0.98
+ssao_enabled = true
+ssao_radius = 1.15
+ssao_intensity = 0.85
+ssao_power = 1.2
+ssil_enabled = true
+ssil_radius = 1.6
+ssil_intensity = 0.42
+fog_enabled = true
+fog_light_color = Color(0.87, 0.91, 0.95, 1)
+fog_light_energy = 0.14
+fog_density = 0.0035
+fog_sky_affect = 0.12
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.006
+volumetric_fog_albedo = Color(0.89, 0.91, 0.94, 1)
+glow_enabled = true
+glow_bloom = 0.01
+glow_intensity = 0.03
+
+[sub_resource type="ProceduralSkyMaterial" id="2"]
+sky_top_color = Color(0.73, 0.82, 0.90, 1)
+sky_horizon_color = Color(0.79, 0.89, 0.96, 1)
+ground_bottom_color = Color(0.68, 0.83, 0.88, 1)
+ground_horizon_color = Color(0.78, 0.89, 0.92, 1)
+energy_multiplier = 1.05
+
+[sub_resource type="Sky" id="3"]
+sky_material = SubResource("2")
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1")
+
+[node name="BoardRoot" type="Node3D" parent="."]
+
+[node name="CameraPivot" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot"]
+position = Vector3(0, 12, 12)
+rotation = Vector3(-0.7, 0, 0)
+current = true
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.9, -0.45, 0)
+light_color = Color(1, 0.95, 0.88, 1)
+light_energy = 1.38
+shadow_enabled = true
+shadow_bias = 0.015
+shadow_normal_bias = 1.1
+directional_shadow_mode = 2
+directional_shadow_max_distance = 96.0
+shadow_blur = 0.7
+light_angular_distance = 0.4
+
+[node name="FillLight" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-1.2, 2.4, 0)
+light_color = Color(0.78, 0.88, 1, 1)
+light_energy = 0.28
+shadow_enabled = false
+
+[node name="BounceLight" type="OmniLight3D" parent="."]
+position = Vector3(0, 2.2, 0)
+light_color = Color(1, 0.94, 0.88, 1)
+light_energy = 0.35
+omni_range = 9.0
+shadow_enabled = false
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("1")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="HUDRoot" type="Control" parent="CanvasLayer"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1")
+mouse_filter = 1
 
-[node name="VBox" type="VBoxContainer" parent="."]
+[node name="TopLeftPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 330.0
+offset_bottom = 82.0
+
+[node name="CurrencyRow" type="HBoxContainer" parent="CanvasLayer/HUDRoot/TopLeftPanel"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
-[node name="CoinsLabel" type="Label" parent="VBox"]
+[node name="CoinsChip" type="PanelContainer" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CoinsLabel" type="Label" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow/CoinsChip"]
 layout_mode = 2
 text = "Coins: 0"
 
-[node name="CurrentTileLabel" type="Label" parent="VBox"]
+[node name="ScoreChip" type="PanelContainer" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow"]
 layout_mode = 2
-text = "Current tile: (none)"
+size_flags_horizontal = 3
 
-[node name="BoardLabel" type="Label" parent="VBox"]
+[node name="ScoreLabel" type="Label" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow/ScoreChip"]
 layout_mode = 2
-text = "Board"
-autowrap_mode = 3
+text = "Score: 0"
 
-[node name="MessageLabel" type="Label" parent="VBox"]
+[node name="HighScoreChip" type="PanelContainer" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow"]
 layout_mode = 2
-text = "Ready"
+size_flags_horizontal = 3
 
-[node name="Buttons" type="GridContainer" parent="VBox"]
+[node name="HighScoreLabel" type="Label" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow/HighScoreChip"]
 layout_mode = 2
-columns = 3
+text = "High Score: 0"
 
-[node name="DrawTile" type="Button" parent="VBox/Buttons"]
+[node name="ActionsRail" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 98.0
+offset_right = 220.0
+offset_bottom = 532.0
+
+[node name="RailVBox" type="VBoxContainer" parent="CanvasLayer/HUDRoot/ActionsRail"]
 layout_mode = 2
-text = "Draw Tile"
+theme_override_constants/separation = 6
 
-[node name="Save" type="Button" parent="VBox/Buttons"]
+[node name="DrawButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+text = "Draw"
+
+[node name="SubmitScoreButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+text = "Submit Score"
+
+[node name="SaveButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
 text = "Save"
 
-[node name="Load" type="Button" parent="VBox/Buttons"]
+[node name="LoadButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
 text = "Load"
 
-[node name="Place0" type="Button" parent="VBox/Buttons"]
+[node name="RefreshHighScoreButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
-text = "Place 0"
+text = "Refresh High Score"
 
-[node name="Place1" type="Button" parent="VBox/Buttons"]
+[node name="SeedRow" type="HBoxContainer" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
-text = "Place 1"
 
-[node name="Place2" type="Button" parent="VBox/Buttons"]
+[node name="SeedEdit" type="LineEdit" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox/SeedRow"]
 layout_mode = 2
-text = "Place 2"
+size_flags_horizontal = 3
+placeholder_text = "Seed"
 
-[node name="Place3" type="Button" parent="VBox/Buttons"]
+[node name="NewGameButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox/SeedRow"]
 layout_mode = 2
-text = "Place 3"
+text = "New"
 
-[node name="Place4" type="Button" parent="VBox/Buttons"]
+[node name="SavePathEdit" type="LineEdit" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
-text = "Place 4"
+placeholder_text = "user://save.json"
+text = "user://save.json"
 
-[node name="Place5" type="Button" parent="VBox/Buttons"]
+[node name="UnlockToggleButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
-text = "Place 5"
+toggle_mode = true
+button_pressed = true
+text = "Unlock Panel"
 
-[node name="Place6" type="Button" parent="VBox/Buttons"]
+[node name="UnlockPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
-text = "Place 6"
+size_flags_vertical = 3
 
-[node name="Place7" type="Button" parent="VBox/Buttons"]
+[node name="UnlockScroll" type="ScrollContainer" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox/UnlockPanel"]
 layout_mode = 2
-text = "Place 7"
+custom_minimum_size = Vector2(0, 120)
 
-[node name="Place8" type="Button" parent="VBox/Buttons"]
+[node name="UnlockButtons" type="VBoxContainer" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox/UnlockPanel/UnlockScroll"]
 layout_mode = 2
-text = "Place 8"
+theme_override_constants/separation = 4
+
+[node name="TileDeckPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -312.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 254.0
+
+[node name="DeckVBox" type="VBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DeckTitle" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+text = "Tile Deck"
+
+[node name="CurrentTileLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Current Tile: (none)"
+
+[node name="RotationLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+text = "Rotation: 0 deg (Q/E)"
+
+[node name="UnlockedTilesLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Unlocked: Plains"
+
+[node name="TutorialHintPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+
+[node name="TutorialHintLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TutorialHintPanel"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Tap Draw to get a tile, then click a hex to place."
+
+[node name="LastMessageLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Last Message:"
+
+[node name="StatusLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Status:"
+
+[node name="EventPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
+layout_mode = 1
+anchors_preset = 9
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -190.0
+offset_right = 330.0
+offset_bottom = -12.0
+
+[node name="EventVBox" type="VBoxContainer" parent="CanvasLayer/HUDRoot/EventPanel"]
+layout_mode = 2
+
+[node name="EventTitle" type="Label" parent="CanvasLayer/HUDRoot/EventPanel/EventVBox"]
+layout_mode = 2
+text = "Event Log"
+
+[node name="EventLog" type="RichTextLabel" parent="CanvasLayer/HUDRoot/EventPanel/EventVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+scroll_active = true
+bbcode_enabled = false
+fit_content = false
+text = ""
+
+[node name="BottomCenter" type="HBoxContainer" parent="CanvasLayer/HUDRoot"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -90.0
+offset_top = -62.0
+offset_right = 90.0
+offset_bottom = -12.0
+alignment = 1
+
+[node name="FocusButton" type="Button" parent="CanvasLayer/HUDRoot/BottomCenter"]
+layout_mode = 2
+text = "Focus Board"
+
+[node name="HintArrow" type="Label" parent="CanvasLayer/HUDRoot"]
+layout_mode = 1
+offset_left = 182.0
+offset_top = 116.0
+offset_right = 222.0
+offset_bottom = 156.0
+theme_override_font_sizes/font_size = 28
+text = "↓"
+horizontal_alignment = 1
+vertical_alignment = 1
