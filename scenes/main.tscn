@@ -4,37 +4,37 @@
 
 [sub_resource type="Environment" id="1"]
 background_mode = 1
-background_color = Color(0.70, 0.86, 0.90, 1)
+background_color = Color(0.72, 0.85, 0.89, 1)
 ambient_light_source = 2
-ambient_light_color = Color(0.93, 0.93, 0.95, 1)
-ambient_light_energy = 0.48
+ambient_light_color = Color(0.93, 0.92, 0.93, 1)
+ambient_light_energy = 0.46
 tonemap_mode = 2
-tonemap_exposure = 0.98
+tonemap_exposure = 0.96
 ssao_enabled = true
-ssao_radius = 1.15
-ssao_intensity = 0.85
+ssao_radius = 1.08
+ssao_intensity = 0.82
 ssao_power = 1.2
 ssil_enabled = true
-ssil_radius = 1.6
-ssil_intensity = 0.42
+ssil_radius = 1.45
+ssil_intensity = 0.34
 fog_enabled = true
-fog_light_color = Color(0.87, 0.91, 0.95, 1)
-fog_light_energy = 0.14
-fog_density = 0.0035
-fog_sky_affect = 0.12
+fog_light_color = Color(0.88, 0.91, 0.94, 1)
+fog_light_energy = 0.12
+fog_density = 0.0028
+fog_sky_affect = 0.10
 volumetric_fog_enabled = true
-volumetric_fog_density = 0.006
-volumetric_fog_albedo = Color(0.89, 0.91, 0.94, 1)
+volumetric_fog_density = 0.0045
+volumetric_fog_albedo = Color(0.90, 0.91, 0.93, 1)
 glow_enabled = true
 glow_bloom = 0.01
-glow_intensity = 0.03
+glow_intensity = 0.02
 
 [sub_resource type="ProceduralSkyMaterial" id="2"]
-sky_top_color = Color(0.73, 0.82, 0.90, 1)
-sky_horizon_color = Color(0.79, 0.89, 0.96, 1)
-ground_bottom_color = Color(0.68, 0.83, 0.88, 1)
-ground_horizon_color = Color(0.78, 0.89, 0.92, 1)
-energy_multiplier = 1.05
+sky_top_color = Color(0.75, 0.82, 0.87, 1)
+sky_horizon_color = Color(0.78, 0.89, 0.96, 1)
+ground_bottom_color = Color(0.69, 0.81, 0.85, 1)
+ground_horizon_color = Color(0.79, 0.88, 0.91, 1)
+energy_multiplier = 1.03
 
 [sub_resource type="Sky" id="3"]
 sky_material = SubResource("2")
@@ -53,11 +53,11 @@ current = true
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 rotation = Vector3(-0.9, -0.45, 0)
-light_color = Color(1, 0.95, 0.88, 1)
-light_energy = 1.38
+light_color = Color(1, 0.95, 0.87, 1)
+light_energy = 1.34
 shadow_enabled = true
-shadow_bias = 0.015
-shadow_normal_bias = 1.1
+shadow_bias = 0.016
+shadow_normal_bias = 1.0
 directional_shadow_mode = 2
 directional_shadow_max_distance = 96.0
 shadow_blur = 0.7
@@ -65,14 +65,14 @@ light_angular_distance = 0.4
 
 [node name="FillLight" type="DirectionalLight3D" parent="."]
 rotation = Vector3(-1.2, 2.4, 0)
-light_color = Color(0.78, 0.88, 1, 1)
-light_energy = 0.28
+light_color = Color(0.79, 0.89, 1, 1)
+light_energy = 0.25
 shadow_enabled = false
 
 [node name="BounceLight" type="OmniLight3D" parent="."]
 position = Vector3(0, 2.2, 0)
-light_color = Color(1, 0.94, 0.88, 1)
-light_energy = 0.35
+light_color = Color(0.98, 0.93, 0.89, 1)
+light_energy = 0.30
 omni_range = 9.0
 shadow_enabled = false
 
@@ -125,6 +125,10 @@ size_flags_horizontal = 3
 layout_mode = 2
 text = "High Score: 0"
 
+[node name="UtilityButton" type="Button" parent="CanvasLayer/HUDRoot/TopLeftPanel/CurrencyRow"]
+layout_mode = 2
+text = "Menu"
+
 [node name="ActionsRail" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
 layout_mode = 1
 offset_left = 12.0
@@ -136,6 +140,10 @@ offset_bottom = 532.0
 layout_mode = 2
 theme_override_constants/separation = 6
 
+[node name="PlayToolsLabel" type="Label" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+text = "Play"
+
 [node name="DrawButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
 text = "Draw"
@@ -143,6 +151,13 @@ text = "Draw"
 [node name="SubmitScoreButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
 text = "Submit Score"
+
+[node name="RailSep1" type="HSeparator" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+
+[node name="SessionToolsLabel" type="Label" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+text = "Session"
 
 [node name="SaveButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
@@ -173,6 +188,13 @@ layout_mode = 2
 placeholder_text = "user://save.json"
 text = "user://save.json"
 
+[node name="RailSep2" type="HSeparator" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+
+[node name="StorageToolsLabel" type="Label" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
+layout_mode = 2
+text = "Storage"
+
 [node name="UnlockToggleButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
 toggle_mode = true
@@ -199,7 +221,7 @@ anchor_right = 1.0
 offset_left = -312.0
 offset_top = 12.0
 offset_right = -12.0
-offset_bottom = 254.0
+offset_bottom = 278.0
 
 [node name="DeckVBox" type="VBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel"]
 layout_mode = 2
@@ -207,16 +229,33 @@ theme_override_constants/separation = 6
 
 [node name="DeckTitle" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
 layout_mode = 2
-text = "Tile Deck"
+text = "Current Tile"
 
-[node name="CurrentTileLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+[node name="TileCardRow" type="HBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TileSwatchPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(42, 42)
+
+[node name="TileSwatchColor" type="ColorRect" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow/TileSwatchPanel"]
+layout_mode = 2
+color = Color(0.9, 0.95, 0.95, 1)
+
+[node name="TileCardText" type="VBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="CurrentTileLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow/TileCardText"]
 layout_mode = 2
 autowrap_mode = 3
-text = "Current Tile: (none)"
+text = "No tile in hand"
 
-[node name="RotationLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+[node name="RotationLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow/TileCardText"]
 layout_mode = 2
-text = "Rotation: 0 deg (Q/E)"
+text = "Rotation 0° (Q/E)"
 
 [node name="UnlockedTilesLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
 layout_mode = 2
@@ -234,12 +273,12 @@ text = "Tap Draw to get a tile, then click a hex to place."
 [node name="LastMessageLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
 layout_mode = 2
 autowrap_mode = 3
-text = "Last Message:"
+text = "Last:"
 
 [node name="StatusLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
 layout_mode = 2
 autowrap_mode = 3
-text = "Status:"
+text = "Status"
 
 [node name="EventPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
 layout_mode = 1
@@ -247,7 +286,7 @@ anchors_preset = 9
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 12.0
-offset_top = -190.0
+offset_top = -146.0
 offset_right = 330.0
 offset_bottom = -12.0
 
@@ -256,7 +295,7 @@ layout_mode = 2
 
 [node name="EventTitle" type="Label" parent="CanvasLayer/HUDRoot/EventPanel/EventVBox"]
 layout_mode = 2
-text = "Event Log"
+text = "Recent"
 
 [node name="EventLog" type="RichTextLabel" parent="CanvasLayer/HUDRoot/EventPanel/EventVBox"]
 layout_mode = 2

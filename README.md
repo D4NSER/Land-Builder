@@ -26,3 +26,32 @@ Structured project documentation is being developed in stages.
 - Stage 13: Deterministic Session Continuity & Replay Safety → `docs/stage13_deterministic_session_continuity.md`
 - Stage 14: Unlockable Tile Progression System → `docs\stage14_unlockable_tile_progression.md`
 - Stage 15: Deterministic Scoring + High Score Persistence → `docs\stage15_deterministic_scoring_and_highscore.md`
+## Godot 4 Prototype (Current Presentation)
+
+Open the project in Godot 4.x with .NET support and run the main scene (`res://scenes/Main.tscn`).
+
+### Core Controls
+- `LMB`: place current tile on hovered slot
+- `Q` / `E`: rotate tile preview/placement
+- `Space`: draw tile
+- `Enter`: submit score
+- `RMB Drag`: orbit camera
+- `Mouse Wheel`: zoom
+- `F`: focus/center camera
+- `T`: toggle empty-slot plus overlays
+- `Tab`: toggle utility panel (menu)
+
+### Minimal Mode UX
+- The scene defaults to a board-first minimal mode.
+- A starter tile is placed automatically on new sessions (presentation-only onboarding).
+- Utility controls (save/load/new game/unlocks/tools) are hidden until `Tab` or `Menu`.
+
+### Utility Panel / Metrics
+- When the utility panel is open, the `Recent` event panel title shows lightweight perf metrics:
+  - mesh instance count
+  - node count
+- A soft UI warning is emitted if mesh instances exceed the current presentation threshold (`150`).
+
+### Save / High Score Paths
+- Save path defaults to `user://save.json` (editable in utility panel)
+- High score path defaults to `user://highscore.json`
