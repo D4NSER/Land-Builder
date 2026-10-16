@@ -4,3 +4,6 @@
 *.user
 *.suo
 TestResults/
+
+# Godot editor/import cache (regenerated automatically)
+.godot/

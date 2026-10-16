@@ -52,8 +52,8 @@ public partial class BoardView : Node3D
 
         _candidateMaterial = Unshaded(new Color(1, 1, 1, 0.22f));
         _candidateHintMaterial = Unshaded(new Color(Palette.Gold, 0.95f));
-        _matchMaterial = Unshaded(new Color(Palette.Good.Lightened(0.2f), 0.95f));
-        _mismatchMaterial = Unshaded(new Color(Palette.Bad, 0.95f));
+        _matchMaterial = Unshaded(new Color("62e887"), onTop: true);
+        _mismatchMaterial = Unshaded(new Color("ff5b4d"), onTop: true);
 
         _outlineMesh = BuildOutlineMesh(0.86f, 0.028f);
         _edgeMarkerMesh = BuildEdgeMarkerMesh();
@@ -72,13 +72,14 @@ public partial class BoardView : Node3D
         }
     }
 
-    private static StandardMaterial3D Unshaded(Color color) => new()
+    private static StandardMaterial3D Unshaded(Color color, bool onTop = false) => new()
     {
         ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
         Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
         AlbedoColor = color,
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        NoDepthTest = false
+        NoDepthTest = onTop,
+        RenderPriority = onTop ? 10 : 0
     };
 
     // ------------------------------------------------------------------ building
@@ -477,10 +478,10 @@ public partial class BoardView : Node3D
         kit.Transform = new Transform3D(Basis.Identity, Vector3.Zero);
         var half = HexLayout.Radius * 0.42f;
         var up = Vector3.Up;
-        var a = new Vector3(-0.07f, 0.0f, -half);
+        var a = new Vector3(-0.11f, 0.0f, -half);
         var b = new Vector3(0.0f, 0.0f, -half);
         var c = new Vector3(0.0f, 0.0f, half);
-        var d = new Vector3(-0.07f, 0.0f, half);
+        var d = new Vector3(-0.11f, 0.0f, half);
         kit.TriangleSmooth(a, d, c, up, up, up, color, color, color);
         kit.TriangleSmooth(a, c, b, up, up, up, color, color, color);
         return kit.Commit(withCustom: false);

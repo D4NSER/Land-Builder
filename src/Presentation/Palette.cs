@@ -43,18 +43,6 @@ public static class Palette
         _ => Colors.Magenta
     };
 
-    public static string TerrainGlyph(Terrain terrain) => terrain switch
-    {
-        Terrain.Grass => "❀",
-        Terrain.Forest => "♣",
-        Terrain.Field => "≋",
-        Terrain.Village => "⌂",
-        Terrain.Water => "≈",
-        Terrain.Mountain => "▲",
-        Terrain.Sand => "◠",
-        _ => "?"
-    };
-
     public static readonly Color SoilTop = new("7a5638");
     public static readonly Color SoilMid = new("634530");
     public static readonly Color Rock = new("575049");

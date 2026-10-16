@@ -214,14 +214,14 @@ public static class UiKit
         return bar;
     }
 
-    /// <summary>Round coloured badge with a glyph, used for terrain icons.</summary>
-    public static PanelContainer Badge(string glyph, Color color, int size = 40, int fontSize = 22)
+    /// <summary>Round coloured badge with a vector icon, used for terrain and rule icons.</summary>
+    public static PanelContainer Badge(IconKind icon, Color color, int size = 40)
     {
         var badge = new PanelContainer { CustomMinimumSize = new Vector2(size, size), MouseFilter = Control.MouseFilterEnum.Ignore };
         badge.AddThemeStyleboxOverride("panel", Box(color, size / 2, border: color.Lightened(0.35f), borderWidth: 2));
-        var label = Text(glyph, fontSize, Colors.White, Bold, HorizontalAlignment.Center, 4, color.Darkened(0.35f));
-        label.VerticalAlignment = VerticalAlignment.Center;
-        badge.AddChild(label);
+        var center = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        center.AddChild(new Icon(icon, Colors.White, size * 0.58f));
+        badge.AddChild(center);
         return badge;
     }
 

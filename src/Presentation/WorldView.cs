@@ -14,6 +14,16 @@ public partial class WorldView : Node3D
     private DirectionalLight3D _sun = null!;
     private MeshInstance3D _ocean = null!;
     private float _time;
+    private ProceduralSkyMaterial _sky = null!;
+    private float _daylight = 0.3f;
+    private float _daylightTarget = 0.3f;
+
+    /// <summary>0 = fresh morning, 0.4 = midday, 1 = golden hour. Eased towards over a few seconds.</summary>
+    public float DaylightTarget
+    {
+        get => _daylightTarget;
+        set => _daylightTarget = Mathf.Clamp(value, 0f, 1f);
+    }
 
     public Godot.Environment Environment => _environment;
     public DirectionalLight3D Sun => _sun;
@@ -31,6 +41,7 @@ public partial class WorldView : Node3D
             SunCurve = 0.08f
         };
 
+        _sky = sky;
         _environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
@@ -255,6 +266,8 @@ public partial class WorldView : Node3D
     {
         var dt = (float)delta;
         _time += dt;
+        _daylight = Mathf.Lerp(_daylight, _daylightTarget, Ease.Damp(0.6f, dt));
+        ApplyDaylight(_daylight);
 
         if (GetNodeOrNull<Node3D>("Seabed") is { } seabed)
         {
@@ -284,6 +297,25 @@ public partial class WorldView : Node3D
             node.GetNode<Node3D>("L").Rotation = new Vector3(0, 0, -flap);
             node.GetNode<Node3D>("R").Rotation = new Vector3(0, 0, flap);
         }
+    }
+
+    private void ApplyDaylight(float t)
+    {
+        // Keyframes: morning, midday, golden hour.
+        static float Key3(float t, float a, float b, float c) => t < 0.4f ? Mathf.Lerp(a, b, t / 0.4f) : Mathf.Lerp(b, c, (t - 0.4f) / 0.6f);
+        static Color Col3(float t, Color a, Color b, Color c) => t < 0.4f ? a.Lerp(b, t / 0.4f) : b.Lerp(c, (t - 0.4f) / 0.6f);
+
+        _sun.Rotation = new Vector3(
+            Mathf.DegToRad(Key3(t, -34f, -56f, -22f)),
+            Mathf.DegToRad(Key3(t, 70f, 38f, -12f)),
+            0f);
+        _sun.LightColor = Col3(t, new Color("fff4e2"), new Color("fff1dc"), new Color("ffd49c"));
+        _sun.LightEnergy = Key3(t, 1.4f, 1.55f, 1.45f);
+        _sky.SkyTopColor = Col3(t, new Color("63a9dc"), new Color("5aa6dc"), new Color("5b9ad3"));
+        _sky.SkyHorizonColor = Col3(t, new Color("d6ecf2"), new Color("cfe8f2"), new Color("f2e0c6"));
+        _sky.GroundHorizonColor = _sky.SkyHorizonColor;
+        _environment.FogLightColor = _sky.SkyHorizonColor;
+        _environment.AmbientLightEnergy = Key3(t, 0.85f, 0.8f, 0.78f);
     }
 
     public void ApplyQuality(bool shadows, bool ssao, bool glow)

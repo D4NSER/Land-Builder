@@ -14,6 +14,7 @@ config/name="Land Builder"
 config/description="Grow a cozy island, one hex tile at a time."
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6", "C#")
+config/icon="res://icon.svg"
 boot_splash/bg_color=Color(0.56, 0.79, 0.91, 1)
 boot_splash/show_image=false
 

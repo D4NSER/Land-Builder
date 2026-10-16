@@ -22,8 +22,8 @@ public partial class Main : Node3D
         GameOver
     }
 
-    private const string SavePath = "user://save.json";
-    private const string ScoresPath = "user://highscores.json";
+    private string SavePath = "user://save.json";
+    private string ScoresPath = "user://highscores.json";
     private const float HoverHeight = 0.55f;
 
     private readonly SaveRepository _saves = new();
@@ -91,6 +91,14 @@ public partial class Main : Node3D
         _captureDir = args.FirstOrDefault(a => a.StartsWith("--capture-dir="))?.Split('=', 2)[1];
         _captureEvery = int.TryParse(args.FirstOrDefault(a => a.StartsWith("--capture-every="))?.Split('=', 2)[1], out var every) ? every : 90;
         _titleCapture = args.Contains("--title");
+        _selfTest = args.Contains("--selftest");
+        if (_selfTest || _autoplay)
+        {
+            // Never touch the player's real save or leaderboard from automated runs.
+            SavePath = "user://automation/save.json";
+            ScoresPath = "user://automation/highscores.json";
+            System.IO.Directory.CreateDirectory(ProjectSettings.GlobalizePath("user://automation"));
+        }
 
         _audio = new Audio { Name = "Audio" };
         AddChild(_audio);
@@ -135,7 +143,18 @@ public partial class Main : Node3D
             StartNewGame(20240611UL);
         else
             GoToTitle();
+
+        if (_selfTest)
+            RunSelfTest();
     }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is InputEventMouse mouse)
+            _mousePos = mouse.Position;
+    }
+
+    private Vector2 _mousePos;
 
     // Debug capture: periodic screenshots and FPS logging, used for automated visual checks.
     private string? _captureDir;
@@ -176,6 +195,8 @@ public partial class Main : Node3D
         BeginSession(GameSession.StartNew(0xA77AC7UL ^ (ulong)DateTime.UtcNow.Minute, _sink), swoop: false);
         _hud.Visible = false;
         _rig.SetAutoOrbit(0.06f);
+        _rig.ScreenShift = -0.75f;
+        _board.SetCandidatesVisible(false);
         _menus.ShowTitle(_saves.TryLoad(ProjectSettings.GlobalizePath(SavePath), out var s, out _) && !s.IsGameOver, LoadLeaderboard());
     }
 
@@ -189,9 +210,11 @@ public partial class Main : Node3D
         _menus.HideAll();
         _hud.Visible = true;
         _rig.SetAutoOrbit(0f);
+        _rig.ScreenShift = 0f;
+        _board.SetCandidatesVisible(_showCandidates);
         BeginSession(GameSession.StartNew(seed, _sink), swoop: true);
         _audio.Play(Sfx.Whoosh);
-        _tutorialStage = _settings.TutorialDone || _autoplay ? 99 : 0;
+        _tutorialStage = _settings.TutorialDone || _autoplay || _selfTest ? 99 : 0;
         _tutorialMark = 0;
         UpdateTutorial();
     }
@@ -210,6 +233,8 @@ public partial class Main : Node3D
         _menus.HideAll();
         _hud.Visible = true;
         _rig.SetAutoOrbit(0f);
+        _rig.ScreenShift = 0f;
+        _board.SetCandidatesVisible(_showCandidates);
         BeginSession(new GameSession(state, _sink), swoop: true);
         _tutorialStage = 99;
         _hud.ShowTip(null);
@@ -338,6 +363,11 @@ public partial class Main : Node3D
         }
 
         _world.BirdCenter = IslandCentre();
+        if (_session is not null)
+        {
+            var st = _session.State;
+            _world.DaylightTarget = _attract ? 0.3f : 0.15f + (0.85f * st.Turn / Mathf.Max(1f, st.Turn + st.TilesLeft + 6f));
+        }
         _rig.AutoFocus = IslandCentre();
     }
 
@@ -379,7 +409,7 @@ public partial class Main : Node3D
             return;
         }
 
-        var mouse = GetViewport().GetMousePosition();
+        var mouse = _mousePos;
         var overUi = GetViewport().GuiGetHoveredControl() is not null;
         if (overUi || _dragging)
         {
@@ -476,9 +506,9 @@ public partial class Main : Node3D
         _hand.Body.Rotation = new Vector3(0, _handYaw, 0);
         _hand.Root.Scale = Vector3.One * Mathf.Max(0.01f, _handScale.Value);
 
-        if (_hoverEval is { IsValid: true } eval && _hoverSlot is not null && _settings.EdgeHints && !_handHidden)
+        if (_hoverEval is { IsValid: true } eval && _hoverSlot is not null && _settings.EdgeHints && !_handHidden && !_attract)
         {
-            _board.ShowEdgeMarkers(_hand.Root.Position + new Vector3(0, 0.07f, 0), eval);
+            _board.ShowEdgeMarkers(_hand.Root.Position + new Vector3(0, 0.12f, 0), eval);
             var screen = _rig.Camera.UnprojectPosition(_hand.Root.Position + new Vector3(0, 0.45f, 0));
             var (text, color) = DescribeEval(eval);
             _hud.SetHoverInfo(_mode == Mode.Playing && !_attract ? screen : null, text, color);
@@ -982,8 +1012,11 @@ public partial class Main : Node3D
             _saves.Delete(ProjectSettings.GlobalizePath(SavePath));
         RefreshBest();
         _audio.Play(Sfx.GameOver);
-        _rig.SetAutoOrbit(0.08f);
+        _rig.SetAutoOrbit(0.06f);
         _rig.Reframe(IslandCentre(), IslandRadius());
+        _rig.ScreenShift = 0.9f;
+        _hud.Visible = false;
+        _board.SetCandidatesVisible(false);
         _hud.SetHoverInfo(null, "", Colors.White);
         _hud.ShowTip(null);
         _menus.ShowGameOver(state.Score, state.Stats, newBest, rank);

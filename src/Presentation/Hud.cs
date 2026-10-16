@@ -430,7 +430,7 @@ public partial class Hud : Control
 
             var label = pin.GetNode<Label>("Row/Count");
             label.Text = status.Quest.Kind == QuestKind.Exactly
-                ? $"{status.CurrentSize} = {status.Quest.Target}"
+                ? $"{status.CurrentSize} → {status.Quest.Target}"
                 : $"{status.CurrentSize} / {status.Quest.Target}";
         }
 
@@ -452,7 +452,7 @@ public partial class Hud : Control
         var row = new HBoxContainer { Name = "Row", MouseFilter = MouseFilterEnum.Ignore };
         row.AddThemeConstantOverride("separation", 6);
         panel.AddChild(row);
-        row.AddChild(UiKit.Badge(Palette.TerrainGlyph(status.Quest.Terrain), color, 26, 15));
+        row.AddChild(UiKit.Badge(Icon.ForTerrain(status.Quest.Terrain), color, 26));
         var count = UiKit.Text("", 17, Palette.Ink, UiKit.Black);
         count.Name = "Count";
         row.AddChild(count);
@@ -641,7 +641,7 @@ public partial class Hud : Control
             var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
             row.AddThemeConstantOverride("separation", 10);
             Root.AddChild(row);
-            row.AddChild(UiKit.Badge(Palette.TerrainGlyph(quest.Terrain), color, 42, 22));
+            row.AddChild(UiKit.Badge(Icon.ForTerrain(quest.Terrain), color, 42));
             var col = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, SizeFlagsHorizontal = SizeFlags.ExpandFill };
             col.AddThemeConstantOverride("separation", 2);
             row.AddChild(col);

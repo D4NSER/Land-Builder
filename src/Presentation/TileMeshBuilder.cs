@@ -10,7 +10,7 @@ public static class TileMeshBuilder
 {
     public const int Subdivisions = 9;
     public const float TopScale = 0.988f;
-    public const float SkirtBottom = -0.85f;
+    public const float SkirtBottom = -0.62f;
 
     public static ArrayMesh BuildGround(TerrainSampler sampler)
     {
@@ -73,7 +73,7 @@ public static class TileMeshBuilder
     {
         const int segments = Subdivisions;
         var outward = HexLayout.EdgeDirection(edge);
-        float[] depths = [0f, -0.06f, -0.2f, -0.45f, SkirtBottom];
+        float[] depths = [0f, -0.06f, -0.18f, -0.38f, SkirtBottom];
         float[] insets = [1f, 0.995f, 0.985f, 0.97f, 0.94f];
 
         for (var s = 0; s < segments; s++)

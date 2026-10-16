@@ -29,6 +29,9 @@ public partial class CameraRig : Node3D
     private float _autoOrbitSpeed;
 
     public Camera3D Camera => _camera;
+
+    /// <summary>Slides the framing sideways (negative = island appears to the right), e.g. to make room for menus.</summary>
+    public float ScreenShift { get; set; }
     public bool DepthOfField { get; set; } = true;
 
     /// <summary>Radius of the island the auto-framing tries to keep in view.</summary>
@@ -170,6 +173,7 @@ public partial class CameraRig : Node3D
         if (_camera is null)
             return;
         _camera.GlobalPosition = position;
+        _camera.HOffset = Mathf.Lerp(_camera.HOffset, ScreenShift * _distance * 0.2f, dt <= 0f ? 1f : Ease.Damp(3f, dt));
         _camera.LookAt(_focus + new Vector3(0, 0.1f, 0), Vector3.Up);
 
         if (_attributes is not null)

@@ -125,6 +125,10 @@ public partial class Menus : Control
         return false;
     }
 
+    public void OpenSettings() => OpenSub(_settingsScreen);
+
+    public void OpenHowTo() => OpenSub(_howTo);
+
     private void OpenSub(Control screen)
     {
         _returnTo = _title.Visible ? _title : _pause.Visible ? _pause : _gameOver.Visible ? _gameOver : null;
@@ -169,11 +173,11 @@ public partial class Menus : Control
         left.AddChild(UiKit.Button("Quit", () => QuitPressed?.Invoke(), _audio, 300));
 
         var boardPanel = UiKit.Panel(padH: 24, padV: 18);
-        boardPanel.SetAnchorsPreset(LayoutPreset.CenterRight);
+        boardPanel.SetAnchorsPreset(LayoutPreset.BottomRight);
         boardPanel.GrowHorizontal = GrowDirection.Begin;
-        boardPanel.GrowVertical = GrowDirection.Both;
-        boardPanel.Position = new Vector2(-80, 0);
-        boardPanel.CustomMinimumSize = new Vector2(340, 0);
+        boardPanel.GrowVertical = GrowDirection.Begin;
+        boardPanel.Position = new Vector2(-40, -40);
+        boardPanel.CustomMinimumSize = new Vector2(320, 0);
         root.AddChild(boardPanel);
         var col = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         col.AddThemeConstantOverride("separation", 8);
@@ -311,22 +315,22 @@ public partial class Menus : Control
         panel.AddChild(col);
         col.AddChild(UiKit.Text("How to Play", 40, Palette.Ink, UiKit.Black, HorizontalAlignment.Center));
 
-        (string Glyph, Color Color, string Title, string Body)[] rules =
+        (IconKind Glyph, Color Color, string Title, string Body)[] rules =
         [
-            ("⬢", Palette.TerrainSwatch(Terrain.Grass), "Lay tiles", "Each tile has six edges. Place it next to your island; rotate with Q / E, the mouse wheel while holding Shift, or a right-click."),
-            ("✓", Palette.Good, "Match edges", "Every edge that touches the same terrain scores 10 points. Matching edges light up green before you place."),
-            ("★", Palette.Gold, "Perfect fits", "Touch 3+ tiles with every edge matching for a Perfect: bonus points and a free tile. Fill a hole with all six matching for a Flawless!"),
-            ("×", Palette.Accent, "Streaks", "Clean fits against two or more tiles grow your streak multiplier (up to ×2). A mismatched edge resets it."),
-            ("!", Palette.TerrainSwatch(Terrain.Forest), "Quests", "Grow the marked forest, field, village or lake to the target size for points and extra tiles. 'Exactly' quests fail if you overshoot; any quest fails if its area gets closed in."),
-            ("▲", Palette.TerrainSwatch(Terrain.Mountain), "Milestones", "Reaching score milestones adds tiles and unlocks Mountains and Dunes."),
-            ("▣", Palette.Ink, "Your stack", "The run ends when the stack runs out, so keep it alive with perfects, quests and milestones. You have 3 undos per island.")
+            (IconKind.Hex, Palette.TerrainSwatch(Terrain.Grass), "Lay tiles", "Each tile has six edges. Place it next to your island; rotate with Q / E, the mouse wheel while holding Shift, or a right-click."),
+            (IconKind.Check, Palette.Good, "Match edges", "Every edge that touches the same terrain scores 10 points. Matching edges light up green before you place."),
+            (IconKind.Star, Palette.AccentDeep, "Perfect fits", "Touch 3+ tiles with every edge matching for a Perfect: bonus points and a free tile. Fill a hole with all six matching for a Flawless!"),
+            (IconKind.Streak, new Color("e8553f"), "Streaks", "Clean fits against two or more tiles grow your streak multiplier (up to ×2). A mismatched edge resets it."),
+            (IconKind.Flag, Palette.TerrainSwatch(Terrain.Forest), "Quests", "Grow the marked forest, field, village or lake to the target size for points and extra tiles. 'Exactly' quests fail if you overshoot; any quest fails if its area gets closed in."),
+            (IconKind.Mountain, Palette.TerrainSwatch(Terrain.Mountain), "Milestones", "Reaching score milestones adds tiles and unlocks Mountains and Dunes."),
+            (IconKind.Stack, Palette.Ink, "Your stack", "The run ends when the stack runs out, so keep it alive with perfects, quests and milestones. You have 3 undos per island.")
         ];
 
         foreach (var (glyph, color, title, body) in rules)
         {
             var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
             row.AddThemeConstantOverride("separation", 14);
-            row.AddChild(UiKit.Badge(glyph, color, 44, 22));
+            row.AddChild(UiKit.Badge(glyph, color, 44));
             var text = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, SizeFlagsHorizontal = SizeFlags.ExpandFill };
             text.AddThemeConstantOverride("separation", 0);
             text.AddChild(UiKit.Text(title, 20, Palette.Ink, UiKit.Black));
@@ -373,10 +377,13 @@ public partial class Menus : Control
         buttons.AddChild(UiKit.Button("Main Menu", () => MainMenuPressed?.Invoke(), _audio, 220));
         col.AddChild(buttons);
 
+        // Sit beside the island (the camera shifts it to the right) so the player can admire what they built.
         var root = new Control { MouseFilter = MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(LayoutPreset.FullRect);
-        var center = Centered(panel);
-        root.AddChild(center);
+        panel.SetAnchorsPreset(LayoutPreset.CenterLeft);
+        panel.GrowVertical = GrowDirection.Both;
+        panel.Position = new Vector2(90, 0);
+        root.AddChild(panel);
         return root;
     }
 

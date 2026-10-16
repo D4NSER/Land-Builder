@@ -29,16 +29,30 @@ function Resolve-GodotExecutable {
         "godot4-mono",
         "godot4",
         "godot",
-        "Godot_v4.4.1-stable_mono_win64_console",
-        "Godot_v4.4.1-stable_mono_win64",
-        "Godot_v4.4-stable_mono_win64_console",
-        "Godot_v4.4-stable_mono_win64"
+        "Godot_v4.6.1-stable_mono_win64_console",
+        "Godot_v4.6.1-stable_mono_win64"
     )
 
     foreach ($candidate in $candidates) {
         $command = Get-Command $candidate -ErrorAction SilentlyContinue
         if ($command) {
             return $command.Source
+        }
+    }
+
+    # Fall back to the usual places a downloaded Godot .NET build ends up.
+    $searchRoots = @(
+        (Join-Path $env:USERPROFILE "Downloads"),
+        (Join-Path $env:USERPROFILE "Desktop"),
+        $env:ProgramFiles
+    ) | Where-Object { $_ -and (Test-Path $_) }
+
+    foreach ($root in $searchRoots) {
+        $found = Get-ChildItem -Path $root -Filter "Godot_v4.6*mono*win64*.exe" -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+            Sort-Object { $_.Name -like "*console*" }, FullName |
+            Select-Object -First 1
+        if ($found) {
+            return $found.FullName
         }
     }
 
