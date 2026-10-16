@@ -99,7 +99,7 @@ For this project, save names include:
 
 ## Stage 11 addendum
 - Use **Godot 4.2.2-stable .NET** + **.NET SDK 8.0.x** only.
-- For full Windows C# integration workflow, failure matrix, deterministic smoke script, and required evidence bundle, see: `docs/stage11_godot_desktop_integration_and_smoke_exports.md`.
+- For full Windows C# integration workflow, failure matrix, deterministic smoke script, and required evidence bundle, see: `docs/history/stage11_godot_desktop_integration_and_smoke_exports.md`.
 - Quick run order:
   1. `dotnet --version` (must be `8.0.x`)
   2. Open `project.godot` in Godot .NET build

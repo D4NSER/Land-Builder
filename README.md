@@ -86,4 +86,4 @@ shaders/                       terrain, props (pop-in + wind), water (depth foam
 tests/LandBuilder.Tests/       xUnit tests for the Core
 ```
 
-Earlier milestone design notes are kept in [`docs/`](docs/) for history. The current rules are the ones described above.
+Earlier milestone design notes are kept in [`docs/history/`](docs/history/) for reference. The current rules are the ones described above.

@@ -80,5 +80,5 @@ For each OS test run, capture:
 1. Confirm Godot export templates are installed for the pinned version (`4.2.2-stable .NET`).
 2. Before export, run C# build in-editor (`Build -> Build Project`).
 3. Export using Windows preset to `builds/windows/`.
-4. Run exported `.exe` and execute the deterministic mini-script documented in `docs/stage11_godot_desktop_integration_and_smoke_exports.md`.
+4. Run exported `.exe` and execute the deterministic mini-script documented in `docs/history/stage11_godot_desktop_integration_and_smoke_exports.md`.
 5. Validate and capture artifacts: startup screenshot, post-action screenshot, save/load proof, run log snippet, and final key values (`Coins`, `CurrentObjectiveIndex`, building counts).
