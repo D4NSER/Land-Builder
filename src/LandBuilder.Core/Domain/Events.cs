@@ -2,16 +2,70 @@ namespace LandBuilder.Domain;
 
 public interface IDomainEvent;
 
-public sealed record TileDrawnEvent(TileType TileType) : IDomainEvent;
+public enum PlacementQuality
+{
+    Normal = 0,
+    Perfect = 1,
+    Flawless = 2
+}
 
-public sealed record TilePlacedEvent(int SlotIndex, TileType TileType, int RotationQuarterTurns, long CoinsEarned) : IDomainEvent;
+public enum PlacementRejectionReason
+{
+    GameOver = 0,
+    NoTileInHand = 1,
+    SlotOccupied = 2,
+    NotConnected = 3
+}
 
-public sealed record CoinsEarnedEvent(long Amount, string Reason) : IDomainEvent;
+/// <summary>Full breakdown of what a placement is worth. Also used for hover previews before committing.</summary>
+public sealed record PlacementEvaluation(
+    int Slot,
+    int Rotation,
+    bool IsValid,
+    PlacementRejectionReason? RejectionReason,
+    IReadOnlyList<int> MatchedEdges,
+    IReadOnlyList<int> MismatchedEdges,
+    int NeighborCount,
+    int BasePoints,
+    double Multiplier,
+    int EdgePoints,
+    PlacementQuality Quality,
+    int BonusPoints,
+    int TilesAwarded)
+{
+    public int TotalPoints => EdgePoints + BonusPoints;
 
-public sealed record PlacementRejectedEvent(int SlotIndex, PlacementRejectionReason Reason, string Message) : IDomainEvent;
+    /// <summary>Clean fits touching two or more tiles grow the streak.</summary>
+    public bool BuildsStreak => MismatchedEdges.Count == 0 && MatchedEdges.Count >= GameRules.StreakMinMatches;
 
-public sealed record CommandRejectedEvent(string ReasonCode, string Message) : IDomainEvent;
+    /// <summary>Any mismatched edge resets the streak; single clean matches just hold it.</summary>
+    public bool BreaksStreak => MismatchedEdges.Count > 0;
+}
 
-public sealed record ScoreSubmittedEvent(int Score) : IDomainEvent;
+public sealed record TilePlacedEvent(int Slot, TileSpec Tile, int Rotation, PlacementEvaluation Evaluation) : IDomainEvent;
 
-public sealed record HighScoreUpdatedEvent(int PreviousHighScore, int NewHighScore) : IDomainEvent;
+public sealed record PlacementRejectedEvent(int Slot, PlacementRejectionReason Reason, string Message) : IDomainEvent;
+
+public sealed record StreakChangedEvent(int Previous, int Current, double Multiplier) : IDomainEvent;
+
+public sealed record QuestStartedEvent(Quest Quest, int CurrentSize) : IDomainEvent;
+
+public sealed record QuestCompletedEvent(Quest Quest, int FinalSize) : IDomainEvent;
+
+public enum QuestFailReason
+{
+    RegionClosed = 0,
+    Overshot = 1
+}
+
+public sealed record QuestFailedEvent(Quest Quest, QuestFailReason Reason, int FinalSize) : IDomainEvent;
+
+public sealed record MilestoneReachedEvent(int Index, long Threshold, int TilesAwarded, Terrain? UnlockedTerrain) : IDomainEvent;
+
+public sealed record TilesAwardedEvent(int Amount, string Reason) : IDomainEvent;
+
+public sealed record HandAdvancedEvent(TileSpec? Current, TileSpec? Next, int StackCount) : IDomainEvent;
+
+public sealed record GameOverEvent(long FinalScore, RunStats Stats) : IDomainEvent;
+
+public sealed record HighScoreUpdatedEvent(long PreviousHighScore, long NewHighScore) : IDomainEvent;
