@@ -120,6 +120,7 @@ public sealed class RiverAndThemeTests
     [InlineData(WorldTheme.Tropical, 0, Terrain.Sand)]
     [InlineData(WorldTheme.Autumn, 0, Terrain.Orchard)]
     [InlineData(WorldTheme.Temperate, 1, Terrain.River)]
+    [InlineData(WorldTheme.Japanese, 2, Terrain.Orchard)]
     public void Milestones_UnlockThemeTerrains(WorldTheme theme, int milestone, Terrain expected)
     {
         Assert.Equal(expected, GameRules.MilestoneUnlock(theme, milestone));

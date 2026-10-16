@@ -4,6 +4,13 @@ vec3 srgb_to_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
 
+// Seasons, driven from C# (SeasonDirector) and shared by every material.
+global uniform float season_snow;
+global uniform float season_autumn;
+global uniform float season_spring;
+global uniform float season_dry;
+global uniform float season_freeze;
+
 float lb_hash(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
 	p += dot(p, p + 45.32);

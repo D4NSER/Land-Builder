@@ -16,6 +16,7 @@ uniform float ripple_scale = 3.0;
 uniform float ripple_strength = 0.35;
 uniform float far_fade = 0.0;
 uniform vec3 murk_color : source_color = vec3(0.36, 0.42, 0.24);
+uniform bool can_freeze = false;
 
 varying float murk;
 
@@ -79,8 +80,16 @@ void fragment() {
 
 	col = mix(col, srgb_to_linear(murk_color), murk * 0.85);
 	foam *= 1.0 - murk * 0.75;
+
+	// Winter ice on lakes, rivers and puddles: pale, opaque, still.
+	float ice = can_freeze ? season_freeze : 0.0;
+	float crack = smoothstep(0.47, 0.5, abs(lb_noise(world_pos.xz * 5.0) - 0.5) + 0.47);
+	col = mix(col, mix(vec3(0.72, 0.84, 0.92), vec3(0.9, 0.95, 1.0), crack), ice * 0.85);
+	foam *= 1.0 - ice;
+	n_world = normalize(mix(n_world, vec3(0.0, 1.0, 0.0), ice));
+	NORMAL = normalize((VIEW_MATRIX * vec4(n_world, 0.0)).xyz);
 	ALBEDO = mix(col, srgb_to_linear(foam_color), foam);
-	ALPHA = mix(clamp(min_alpha + d * (1.0 - min_alpha) + murk * 0.3, 0.0, 1.0), 1.0, foam * 0.9);
+	ALPHA = mix(mix(clamp(min_alpha + d * (1.0 - min_alpha) + murk * 0.3, 0.0, 1.0), 1.0, foam * 0.9), 0.97, ice);
 	ROUGHNESS = mix(0.12, 0.6, foam);
 	SPECULAR = 0.6;
 	METALLIC = 0.0;

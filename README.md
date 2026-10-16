@@ -10,7 +10,9 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 | --- | --- |
 | ![Title screen](docs/screenshots/title.jpg) | ![Late game](docs/screenshots/late-game.jpg) |
 
-![World themes: Coral Coast, Amber Vale, Sunlit Plains, Northern Reach](docs/screenshots/themes.jpg)
+![Architecture per theme](docs/screenshots/architecture.jpg)
+
+![Seasons: spring, summer, autumn, winter](docs/screenshots/seasons.jpg)
 
 ## Playing
 
@@ -29,7 +31,17 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 
 ### Rules and scoring
 - **Edges:** each tile has six wedges of terrain: meadow, forest, wheat field, village or lake to start. Every edge that touches the same terrain scores **10 points**. Mismatches are allowed but score nothing.
-- **World themes:** every island rolls one of five themes: *Green Isles*, *Northern Reach*, *Coral Coast*, *Amber Vale* or *Sunlit Plains*. A theme changes the palette, trees, roofs, sea and sky, shifts which terrains show up, and decides which new terrains milestones unlock: Mountains, Dunes, Snowfields, Marsh or Orchards.
+- **World themes:** every island rolls one of six themes. Each has its own architecture, tree species, palette, sea and sky. It also shifts which terrains show up and decides which new terrains milestones unlock: Mountains, Dunes, Snowfields, Marsh or Orchards.
+
+  | Theme | Architecture | Trees |
+  | --- | --- | --- |
+  | Green Isles | European half-timbered houses, townhouses, churches, windmills | pine, fir, oak, birch, maple, poplar |
+  | Northern Reach | Falu-red cabins with turf roofs, stave churches | fir, pine, birch |
+  | Sakura Shores | Minka houses, pagodas, torii gates, stone lanterns, rice paddies | cherry, black pine, bamboo, maple, cypress |
+  | Coral Coast | Thatched stilt huts, longhouses, canoes; rainforest | jungle giants, palms, bananas, ferns |
+  | Sunlit Plains | Rondavels, kraals, granaries | acacia, baobab |
+  | Amber Vale | Rustic farmsteads, red barns, silos | maple, oak, pine |
+- **Seasons:** each milestone turns the season. Spring brings blossom, autumn turns the woods red and gold, and winter lays snow on roofs, trees and ground and freezes the lakes. Islands without winters get a dry or rainy season instead. Weather follows along: petals, pollen and fireflies, falling leaves, snowfall.
 - **Rivers:** unlocked at the second milestone on every island. River edges must meet another river or flow into a lake; a tile that can't legally go anywhere is set aside so you're never stuck.
 - **Perfect / Flawless:** touch 3+ tiles with every edge matching for a *Perfect* (bonus points + 1 tile). Fill a hole with all six edges matching for a *Flawless* (+100, +2 tiles).
 - **Streak:** clean fits against two or more tiles raise a multiplier (up to ×2.0). A mismatched edge resets it.
@@ -70,7 +82,7 @@ Other debug flags (after `--`):
 - `--title`: shows the attract-mode title screen.
 - `--capture-dir=<dir> --capture-every=<frames>`: saves periodic screenshots and logs FPS.
 - `--zoom-water-at=<frame> --zoom-terrain=<Terrain>`: freezes the bot and zooms in on a terrain.
-- `--lab [--lab-terrains] [--lab-far] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues.
+- `--lab [--lab-terrains | --lab-showcase] [--lab-close] [--lab-far] [--theme=<Theme>] [--season=<Season>] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues and reviewing themes and seasons.
 
 Automated runs write to `user://automation/` and never touch your real save or leaderboard.
 
@@ -90,7 +102,9 @@ src/Presentation/              Godot layer
   TerrainSampler.cs            Blended per-wedge height and colour (world-space noise)
   TileMeshBuilder.cs           Ground, skirt and lake meshes
   PropBuilder.cs               Trees, houses, windmills, boats... merged per tile
-  ThemeStyle.cs                Per-theme palettes, foliage, roofs, sea and sky
+  ThemeStyle.cs                Per-theme palettes, tree species, architecture, sea, sky and seasons
+  Seasons.cs                   Season director feeding the season_* global shader parameters
+  PropBuilder*.cs              Props: core scatter, tree library, architecture sets, nature
   WorldView.cs                 Sky shader, sun and day progression, grading, ocean, seabed, clouds, birds, motes
   CameraRig.cs                 Eased orbit camera, auto-framing, shake, tilt-shift DOF
   Hud.cs / Menus.cs / UiKit.cs In-game HUD, menus and the shared UI theme

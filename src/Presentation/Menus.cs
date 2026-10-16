@@ -322,7 +322,7 @@ public partial class Menus : Control
             (IconKind.Star, Palette.AccentDeep, "Perfect fits", "Touch 3+ tiles with every edge matching for a Perfect: bonus points and a free tile. Fill a hole with all six matching for a Flawless!"),
             (IconKind.Streak, new Color("e8553f"), "Streaks", "Clean fits against two or more tiles grow your streak multiplier (up to ×2). A mismatched edge resets it."),
             (IconKind.Flag, Palette.TerrainSwatch(Terrain.Forest), "Quests", "Grow the marked forest, field, village or lake to the target size for points and extra tiles. 'Exactly' quests fail if you overshoot; any quest fails if its area gets closed in."),
-            (IconKind.Mountain, Palette.TerrainSwatch(Terrain.Mountain), "Milestones & themes", "Each island rolls a theme (Green Isles, Northern Reach, Coral Coast, Amber Vale, Sunlit Plains). Score milestones add tiles and unlock that theme's new terrains."),
+            (IconKind.Mountain, Palette.TerrainSwatch(Terrain.Mountain), "Milestones & themes", "Each island rolls a theme (Green Isles, Northern Reach, Sakura Shores, Coral Coast, Amber Vale, Sunlit Plains) with its own architecture and trees. Score milestones add tiles, unlock new terrains and turn the season."),
             (IconKind.River, Palette.TerrainSwatch(Terrain.River), "Rivers", "Once unlocked, river edges must meet another river or flow into a lake. A tile that fits nowhere is set aside."),
             (IconKind.Stack, Palette.Ink, "Your stack", "The run ends when the stack runs out, so keep it alive with perfects, quests and milestones. You have 3 undos per island.")
         ];

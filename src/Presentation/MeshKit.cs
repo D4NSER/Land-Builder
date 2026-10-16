@@ -157,6 +157,33 @@ public sealed class MeshKit
         OrientFrom = previous;
     }
 
+    /// <summary>
+    /// Hipped roof (four sloped faces, ridge along X) sitting on y=0. Used for Japanese, tropical and pagoda roofs;
+    /// a square footprint gives a pyramid.
+    /// </summary>
+    public void HipRoof(float width, float depth, float height, Color roof, Color? under = null)
+    {
+        var hx = width * 0.5f;
+        var hz = depth * 0.5f;
+        var ridge = Mathf.Max(0f, (width - depth) * 0.5f);
+        var c0 = new Vector3(-hx, 0, -hz);
+        var c1 = new Vector3(hx, 0, -hz);
+        var c2 = new Vector3(hx, 0, hz);
+        var c3 = new Vector3(-hx, 0, hz);
+        var r0 = new Vector3(-ridge, height, 0);
+        var r1 = new Vector3(ridge, height, 0);
+        var previous = OrientFrom;
+        OrientFrom = new Vector3(0, height * 0.3f, 0);
+        Quad(c3, c2, r1, r0, roof);
+        Quad(c1, c0, r0, r1, roof);
+        Triangle(c2, c1, r1, roof.Darkened(0.05f));
+        Triangle(c0, c3, r0, roof.Darkened(0.05f));
+        var u = under ?? roof.Darkened(0.3f);
+        Triangle(c0, c1, c2, u);
+        Triangle(c0, c2, c3, u);
+        OrientFrom = previous;
+    }
+
     /// <summary>Low-poly blob (octahedron subdivided once and jittered).</summary>
     public void Blob(Vector3 radii, Color color, int seed, float jitter = 0.12f)
     {

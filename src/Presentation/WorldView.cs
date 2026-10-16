@@ -180,12 +180,70 @@ public partial class WorldView : Node3D
         AddChild(_motes);
     }
 
+    private Season _weather = Season.Summer;
+    private bool _snowfall;
+    private float _motesRadius = 4f;
+    private Vector3 _motesCentre;
+
     public void SetMotesArea(Vector3 centre, float radius)
     {
-        if (_motes.ProcessMaterial is ParticleProcessMaterial process)
-            process.EmissionBoxExtents = new Vector3(radius, 0.4f, radius);
-        _motes.Position = new Vector3(centre.X, 0.4f, centre.Z);
-        _motes.Amount = Mathf.Clamp(Mathf.RoundToInt(radius * radius * 0.9f), 24, 110);
+        _motesCentre = centre;
+        _motesRadius = radius;
+        ApplyWeatherShape();
+    }
+
+    /// <summary>Petals in spring, pollen and fireflies in summer, falling leaves in autumn, snow in winter.</summary>
+    public void SetWeather(Season season, ThemeStyle style)
+    {
+        _weather = season;
+        _snowfall = season == Season.Winter && style.Seasons.Snow > 0.3f;
+        if (_motes.ProcessMaterial is not ParticleProcessMaterial process || _motes.DrawPass1 is not QuadMesh quad || quad.Material is not StandardMaterial3D material)
+            return;
+
+        switch (season)
+        {
+            case Season.Spring:
+                process.Gravity = new Vector3(0.05f, -0.06f, 0);
+                quad.Size = new Vector2(0.03f, 0.022f);
+                material.BlendMode = BaseMaterial3D.BlendModeEnum.Mix;
+                material.AlbedoColor = new Color(Pick(style.Blossoms), 0.9f);
+                break;
+            case Season.Autumn:
+                process.Gravity = new Vector3(0.08f, -0.16f, 0);
+                quad.Size = new Vector2(0.035f, 0.025f);
+                material.BlendMode = BaseMaterial3D.BlendModeEnum.Mix;
+                material.AlbedoColor = new Color("d9682b");
+                break;
+            case Season.Winter when _snowfall:
+                process.Gravity = new Vector3(0.03f, -0.22f, 0);
+                quad.Size = new Vector2(0.022f, 0.022f);
+                material.BlendMode = BaseMaterial3D.BlendModeEnum.Mix;
+                material.AlbedoColor = new Color(1f, 1f, 1f, 0.95f);
+                break;
+            default:
+                process.Gravity = new Vector3(0, 0.02f, 0);
+                quad.Size = new Vector2(0.025f, 0.025f);
+                material.BlendMode = BaseMaterial3D.BlendModeEnum.Add;
+                break;
+        }
+
+        ApplyWeatherShape();
+        ApplyDaylight(_daylight);
+
+        static Color Pick(Color[] options) => options[(int)(GD.Randi() % (uint)options.Length)];
+    }
+
+    private void ApplyWeatherShape()
+    {
+        if (_motes.ProcessMaterial is not ParticleProcessMaterial process)
+            return;
+        var falling = _weather is Season.Spring or Season.Autumn || _snowfall;
+        var height = falling ? 2.5f : 0.4f;
+        process.EmissionBoxExtents = new Vector3(_motesRadius, falling ? 1.2f : 0.4f, _motesRadius);
+        _motes.Position = new Vector3(_motesCentre.X, height, _motesCentre.Z);
+        var density = _snowfall ? 3.5f : falling ? 1.4f : 0.9f;
+        _motes.Amount = Mathf.Clamp(Mathf.RoundToInt(_motesRadius * _motesRadius * density), 24, _snowfall ? 400 : 160);
+        _motes.Lifetime = falling ? 14 : 9;
     }
 
     public void SetMotesEnabled(bool enabled) => _motes.Visible = enabled;
@@ -428,7 +486,7 @@ public partial class WorldView : Node3D
         _environment.AmbientLightEnergy = Key3(t, 0.85f, 0.8f, 0.78f);
 
         // Motes become fireflies as the day ends.
-        if (_motes?.DrawPass1 is QuadMesh { Material: StandardMaterial3D motes })
+        if (_weather == Season.Summer && _motes?.DrawPass1 is QuadMesh { Material: StandardMaterial3D motes })
             motes.AlbedoColor = Col3(t, new Color(1f, 1f, 0.95f, 0.18f), new Color(1f, 0.97f, 0.85f, 0.18f), new Color(1f, 0.85f, 0.45f, 0.75f));
     }
 

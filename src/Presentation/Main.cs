@@ -107,6 +107,8 @@ public partial class Main : Node3D
 
         _audio = new Audio { Name = "Audio" };
         AddChild(_audio);
+        _seasons = new SeasonDirector { Name = "Seasons" };
+        AddChild(_seasons);
         _world = new WorldView { Name = "World" };
         AddChild(_world);
         _fx = new Fx { Name = "Fx" };
@@ -134,7 +136,7 @@ public partial class Main : Node3D
         var uiRoot = new Control { Theme = UiKit.BuildTheme(), MouseFilter = Control.MouseFilterEnum.Ignore };
         uiRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         canvas.AddChild(uiRoot);
-        _hud = new Hud(_audio, (tile, rotation) => _board.CreateTileVisual(tile, rotation, Vector3.Zero, 1234)) { Name = "Hud" };
+        _hud = new Hud(_audio, (tile, _) => _board.CreateDetachedVisual(tile)) { Name = "Hud" };
         uiRoot.AddChild(_hud);
         _menus = new Menus(_audio, _settings) { Name = "Menus" };
         uiRoot.AddChild(_menus);
@@ -180,6 +182,8 @@ public partial class Main : Node3D
     }
 
     private Vector2 _mousePos;
+    private SeasonDirector _seasons = null!;
+    private ThemeStyle _style = ThemeStyle.For(WorldTheme.Temperate);
     private WorldTheme? _forcedTheme;
 
     // Debug capture: periodic screenshots and FPS logging, used for automated visual checks.
@@ -198,7 +202,7 @@ public partial class Main : Node3D
         if (_perfTimer >= 2f)
         {
             _perfTimer = 0f;
-            GD.Print($"[perf] fps={Engine.GetFramesPerSecond():0} tiles={_session?.State.Board.Count} draw={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)}");
+            GD.Print($"[perf] fps={Engine.GetFramesPerSecond():0} tiles={_session?.State.Board.Count} draw={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} tileBuildMs(avg/p95/max)={BuildStat(0.5):0.0}/{BuildStat(0.95):0.0}/{BoardView.MaxBuildMs:0.0} builds={BoardView.BuildTimes.Count}");
         }
 
         if (_zoomWaterFrame > 0 && _frame == _zoomWaterFrame)
@@ -219,6 +223,12 @@ public partial class Main : Node3D
         var image = GetViewport().GetTexture().GetImage();
         System.IO.Directory.CreateDirectory(_captureDir);
         image.SavePng(System.IO.Path.Combine(_captureDir, $"cap_{_frame:00000}.png"));
+    }
+
+    private static double BuildStat(double quantile)
+    {
+        var times = BoardView.BuildTimes.Skip(3).OrderBy(t => t).ToList();
+        return times.Count == 0 ? 0 : times[(int)Math.Min(times.Count - 1, quantile * times.Count)];
     }
 
     private static ulong NewSeed() => (ulong)DateTime.UtcNow.Ticks ^ 0x9E3779B97F4A7C15UL;
@@ -296,8 +306,10 @@ public partial class Main : Node3D
         _board.Clear();
         _pendingFeedback.Clear();
         var style = ThemeStyle.For(session.State.Theme);
+        _style = style;
         _board.ApplyTheme(style);
         _world.ApplyTheme(style);
+        ApplySeason(instant: true);
         _shownScore = session.State.Score;
 
         // Cascade the island in from the centre outwards.
@@ -429,7 +441,7 @@ public partial class Main : Node3D
         if (tile is null)
             return;
 
-        _hand = _board.CreateTileVisual(tile.Value, 0, Vector3.Zero, 4321);
+        _hand = _board.CreateDetachedVisual(tile.Value);
         _hand.SetGrow(1f);
         _handRoot.AddChild(_hand.Root);
         _rotation = 0;
@@ -831,6 +843,10 @@ public partial class Main : Node3D
                     break;
                 }
 
+                case MilestoneReachedEvent when quiet:
+                    After(1.5f, () => ApplySeason(instant: false));
+                    break;
+
                 case TileDiscardedEvent when !quiet:
                     After(delay + 0.4f, () => _hud.Toast("That river tile had nowhere to connect, so it was set aside.", 2.8f));
                     break;
@@ -846,6 +862,7 @@ public partial class Main : Node3D
                             ? $"{Terrains.DisplayName(t)} unlocked  ·  +{milestone.TilesAwarded} tiles"
                             : $"+{milestone.TilesAwarded} tiles";
                         _hud.Banner($"Milestone {milestone.Index + 1}!", subtitle, Palette.Gold, 1.5f);
+                        After(2.4f, () => ApplySeason(instant: false));
                         if (milestone.UnlockedTerrain == Terrain.River)
                             After(2.2f, () => _hud.Toast("Rivers! River edges must connect to another river or a lake.", 4f));
                         _fx.Burst(FxKind.Confetti, IslandCentre() + new Vector3(0, 1.2f, 0), 1.6f);
@@ -876,6 +893,23 @@ public partial class Main : Node3D
         }
 
         GetTree().CreateTimer(seconds).Timeout += action;
+    }
+
+    /// <summary>Seasons follow milestones; a change gets its own banner, sound and weather.</summary>
+    private void ApplySeason(bool instant)
+    {
+        var season = SeasonDirector.ForMilestones(_session.State.MilestonesReached);
+        var changed = season != _seasons.Current;
+        _seasons.Set(season, _style, instant);
+        _world.SetWeather(season, _style);
+        _hud.SetSeason(SeasonDirector.DisplayName(season, _style), SeasonDirector.Tint(season));
+        if (!changed || instant || _attract)
+            return;
+
+        _hud.Banner(SeasonDirector.DisplayName(season, _style), SeasonDirector.Tagline(season, _style), SeasonDirector.Tint(season).Lightened(0.3f), 1.6f);
+        _audio.Play(Sfx.Whoosh, 0.8f);
+        if (season is Season.Autumn or Season.Spring)
+            _fx.Burst(FxKind.Leaves, IslandCentre() + new Vector3(0, 1.5f, 0), 2f);
     }
 
     private void UpdateScoreQueue()
@@ -966,6 +1000,7 @@ public partial class Main : Node3D
         _shownScore = state.Score;
         _hud.SetScore(state.Score);
         _hud.SetStreak(state.Streak, state.StreakMultiplier);
+        ApplySeason(instant: false);
         _handPos.Snap(HexLayout.SlotToWorld(slot) + new Vector3(0, HoverHeight + 0.6f, 0));
         SetHand(state.CurrentTile, immediate: false);
         _handSpawnDelay = 0.1f;

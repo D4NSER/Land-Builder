@@ -10,7 +10,8 @@ public enum WorldTheme
     Nordic = 1,
     Tropical = 2,
     Autumn = 3,
-    Savanna = 4
+    Savanna = 4,
+    Japanese = 5
 }
 
 public sealed record ThemeInfo(
@@ -40,7 +41,10 @@ public static class Themes
             new Dictionary<Terrain, double> { [Terrain.Forest] = 1.3, [Terrain.Orchard] = 1.3, [Terrain.Field] = 1.1 }),
         [WorldTheme.Savanna] = new(WorldTheme.Savanna, "Sunlit Plains", "Golden grass and lonely acacias",
             new Dictionary<int, Terrain> { [0] = Terrain.Sand, [1] = Terrain.River, [2] = Terrain.Mountain, [4] = Terrain.Orchard },
-            new Dictionary<Terrain, double> { [Terrain.Grass] = 1.2, [Terrain.Sand] = 1.3, [Terrain.Field] = 1.1, [Terrain.Forest] = 0.7, [Terrain.Snow] = 0.0 })
+            new Dictionary<Terrain, double> { [Terrain.Grass] = 1.2, [Terrain.Sand] = 1.3, [Terrain.Field] = 1.1, [Terrain.Forest] = 0.7, [Terrain.Snow] = 0.0 }),
+        [WorldTheme.Japanese] = new(WorldTheme.Japanese, "Sakura Shores", "Cherry blossoms, pagodas and rice terraces",
+            new Dictionary<int, Terrain> { [0] = Terrain.Mountain, [1] = Terrain.River, [2] = Terrain.Orchard, [4] = Terrain.Swamp },
+            new Dictionary<Terrain, double> { [Terrain.Orchard] = 1.4, [Terrain.Water] = 1.2, [Terrain.Mountain] = 1.2, [Terrain.Field] = 1.1, [Terrain.Sand] = 0.3, [Terrain.Snow] = 0.5 })
     };
 
     public static ThemeInfo Info(WorldTheme theme) => Infos[theme];

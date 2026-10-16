@@ -246,14 +246,15 @@ public sealed class TerrainSampler
         }
 
         // Sandy shoreline where land dips to the water line.
-        var wet = Mathf.Max(Mathf.Max(water, channel), swamp > 0.2f ? swamp : 0f);
+        var paddy = _style.RicePaddies ? w[(int)Terrain.Field] : 0f;
+        var wet = Mathf.Max(Mathf.Max(water, channel), Mathf.Max(swamp > 0.2f ? swamp : 0f, paddy > 0.3f && height < WaterLevel + 0.01f ? paddy : 0f));
         if (wet > 0.02f)
         {
             var shore = 1f - Mathf.Clamp(Mathf.Abs(height - WaterLevel) / 0.05f, 0f, 1f);
             color = color.Lerp(_style.Shore, shore * 0.7f * (1f - (swamp * 0.8f)));
         }
 
-        var murk = Mathf.Clamp((swamp - water - channel) * 1.4f, 0f, 1f);
+        var murk = Mathf.Max(Mathf.Clamp((swamp - water - channel) * 1.4f, 0f, 1f), paddy * 0.55f);
         return new Sample(height, color, wet, channel, murk);
     }
 
@@ -274,6 +275,14 @@ public sealed class TerrainSampler
             {
                 var h = 0.035f + (n * 0.06f);
                 var c = a.Lerp(b, n).Darkened((fine - 0.5f) * 0.1f);
+                return (Rim(h, landRim, interior), c);
+            }
+            case Terrain.Field when _style.RicePaddies:
+            {
+                // Flooded paddies separated by low grassy bunds.
+                var bund = PaddyBund(wx, wz);
+                var h = Mathf.Lerp(WaterLevel - 0.03f, 0.03f + (n * 0.01f), bund);
+                var c = new Color("6f7f4f").Lerp(a, bund);
                 return (Rim(h, landRim, interior), c);
             }
             case Terrain.Field:
@@ -343,6 +352,18 @@ public sealed class TerrainSampler
             default:
                 return (landRim, Colors.Magenta);
         }
+    }
+
+    /// <summary>1 on the raised banks between rice paddies, 0 in the flooded cells.</summary>
+    private static float PaddyBund(float wx, float wz)
+    {
+        const float cell = 0.42f;
+        var jx = wx + (Noise.Value(wx * 1.3f, wz * 1.3f, 61) * 0.12f);
+        var jz = wz + (Noise.Value(wx * 1.3f + 4f, wz * 1.3f, 61) * 0.12f);
+        var fx = (jx / cell) - Mathf.Floor(jx / cell);
+        var fz = (jz / cell) - Mathf.Floor(jz / cell);
+        var d = Mathf.Min(Mathf.Min(fx, 1f - fx), Mathf.Min(fz, 1f - fz)) * cell;
+        return 1f - Mathf.SmoothStep(0.016f, 0.03f, d);
     }
 
     private static float Rim(float interiorHeight, float rimHeight, float interior) =>

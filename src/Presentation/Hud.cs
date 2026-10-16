@@ -20,6 +20,7 @@ public partial class Hud : Control
     private Label _scoreLabel = null!;
     private Control _scoreBox = null!;
     private Label _bestLabel = null!;
+    private Label _seasonLabel = null!;
     private ProgressBar _milestoneBar = null!;
     private Label _milestoneLabel = null!;
     private PanelContainer _streakPill = null!;
@@ -157,6 +158,8 @@ public partial class Hud : Control
         leftCol.AddChild(UiKit.Text("LAND BUILDER", 15, Palette.AccentDeep, UiKit.Black));
         _bestLabel = UiKit.Text("Best 0", 17, Palette.InkSoft, UiKit.Bold);
         leftCol.AddChild(_bestLabel);
+        _seasonLabel = UiKit.Text("", 15, Palette.InkSoft, UiKit.Black);
+        leftCol.AddChild(_seasonLabel);
 
         // Action buttons, top-right.
         var buttons = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
@@ -305,6 +308,12 @@ public partial class Hud : Control
     public void BumpScore() => _scorePulse = 1f;
 
     public void SetBest(long best) => _bestLabel.Text = $"Best {UiKit.Number(best)}";
+
+    public void SetSeason(string name, Color color)
+    {
+        _seasonLabel.Text = name.ToUpperInvariant();
+        _seasonLabel.LabelSettings.FontColor = color.Darkened(0.15f);
+    }
 
     public void SetMilestone(long score, long previous, long next, Terrain? unlock, int tiles)
     {

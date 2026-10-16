@@ -52,6 +52,7 @@ public partial class BoardView : Node3D
         _lakeMaterial.SetShaderParameter("min_alpha", 0.6f);
         _lakeMaterial.SetShaderParameter("ripple_scale", 6.0f);
         _lakeMaterial.SetShaderParameter("ripple_strength", 0.35f);
+        _lakeMaterial.SetShaderParameter("can_freeze", true);
 
         _candidateMaterial = Unshaded(new Color(1, 1, 1, 0.22f));
         _candidateHintMaterial = Unshaded(new Color(Palette.Gold, 0.95f));
@@ -88,7 +89,88 @@ public partial class BoardView : Node3D
     // ------------------------------------------------------------------ building
 
     /// <summary>Builds tile nodes. <paramref name="worldCenter"/> anchors noise so the tile blends with its neighbours.</summary>
+    private readonly Dictionary<TileSpec, TileVisual> _detachedCache = new();
+    private readonly Queue<TileSpec> _detachedOrder = new();
+
+    /// <summary>
+    /// Visual for a tile that isn't on the board (the hand tile and the HUD previews). Built once per tile spec and
+    /// duplicated afterwards, so a tile seen as "next" costs nothing when it moves into the hand.
+    /// </summary>
+    public TileVisual CreateDetachedVisual(TileSpec tile)
+    {
+        if (!_detachedCache.TryGetValue(tile, out var template))
+        {
+            template = CreateTileVisual(tile, 0, Vector3.Zero, 4321);
+            _detachedCache[tile] = template;
+            _detachedOrder.Enqueue(tile);
+            while (_detachedOrder.Count > 6)
+            {
+                var old = _detachedOrder.Dequeue();
+                if (_detachedCache.Remove(old, out var stale))
+                    stale.Root.Free();
+            }
+        }
+
+        var root = (Node3D)template.Root.Duplicate();
+        var body = root.GetNode<Node3D>("Body");
+        var parts = new List<AnimatedPart>();
+        foreach (var child in body.GetNode<Node3D>("Parts").GetChildren())
+        {
+            if (child is not Node3D node)
+                continue;
+            var kind = node.Name.ToString() switch
+            {
+                "WindmillBlades" => AnimatedPartKind.WindmillBlades,
+                "WaterWheel" => AnimatedPartKind.WaterWheel,
+                _ => AnimatedPartKind.Boat
+            };
+            parts.Add(new AnimatedPart(kind, node, (float)GD.RandRange(0, Mathf.Tau), node.Position));
+        }
+
+        return new TileVisual
+        {
+            Root = root,
+            Body = body,
+            Ground = body.GetNode<MeshInstance3D>("Ground"),
+            Props = body.GetNodeOrNull<MeshInstance3D>("Props"),
+            Water = body.GetNodeOrNull<MeshInstance3D>("Water"),
+            Parts = parts,
+            Tile = tile,
+            Rotation = 0
+        };
+    }
+
+    public override void _ExitTree() => ClearDetachedCache();
+
+    /// <summary>Clears cached hand/preview visuals (their look depends on the island theme).</summary>
+    public void ClearDetachedCache()
+    {
+        foreach (var visual in _detachedCache.Values)
+            visual.Root.Free();
+        _detachedCache.Clear();
+        _detachedOrder.Clear();
+    }
+
+    /// <summary>Slowest tile build so far, in milliseconds (logged by the debug capture).</summary>
+    public static double MaxBuildMs { get; private set; }
+
+    public static List<double> BuildTimes { get; } = new();
+
     public TileVisual CreateTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater = false)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            return BuildTileVisual(tile, rotation, worldCenter, seed, worldWater);
+        }
+        finally
+        {
+            MaxBuildMs = System.Math.Max(MaxBuildMs, watch.Elapsed.TotalMilliseconds);
+            BuildTimes.Add(watch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private TileVisual BuildTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater)
     {
         var root = new Node3D { Name = "Tile" };
         var body = new Node3D { Name = "Body", Rotation = new Vector3(0, HexLayout.RotationToYaw(rotation), 0) };
@@ -157,6 +239,8 @@ public partial class BoardView : Node3D
     /// <summary>Switches palettes for a new island: lakes, sandbanks and every tile built from now on.</summary>
     public void ApplyTheme(ThemeStyle style)
     {
+        if (Style != style)
+            ClearDetachedCache();
         Style = style;
         _lakeMaterial.SetShaderParameter("shallow_color", style.LakeShallow);
         _lakeMaterial.SetShaderParameter("deep_color", style.LakeDeep);
@@ -435,6 +519,9 @@ public partial class BoardView : Node3D
             {
                 case AnimatedPartKind.WindmillBlades:
                     part.Node.GetChild<Node3D>(0).Rotation = new Vector3(0, 0, (_time * 1.4f) + part.Phase);
+                    break;
+                case AnimatedPartKind.WaterWheel:
+                    part.Node.GetChild<Node3D>(0).Rotation = new Vector3((_time * 1.6f) + part.Phase, 0, 0);
                     break;
                 case AnimatedPartKind.Boat:
                     var bob = Mathf.Sin((_time * 1.6f) + part.Phase) * 0.006f;

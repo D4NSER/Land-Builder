@@ -50,13 +50,12 @@ public static class TileMeshBuilder
                 {
                     var p = (ka * (i / (float)n)) + ((kb - ka) * (j / (float)n));
                     var s = sampler.Evaluate(p.X, p.Z);
-                    var hx0 = sampler.Evaluate(p.X - eps, p.Z).Height;
+                    // Forward differences: two extra samples per vertex instead of four.
                     var hx1 = sampler.Evaluate(p.X + eps, p.Z).Height;
-                    var hz0 = sampler.Evaluate(p.X, p.Z - eps).Height;
                     var hz1 = sampler.Evaluate(p.X, p.Z + eps).Height;
                     var idx = Index(i, j);
                     pos[idx] = new Vector3(p.X, s.Height, p.Z);
-                    nor[idx] = new Vector3((hx0 - hx1) / (2f * eps), 1f, (hz0 - hz1) / (2f * eps)).Normalized();
+                    nor[idx] = new Vector3((s.Height - hx1) / eps, 1f, (s.Height - hz1) / eps).Normalized();
                     col[idx] = s.Color;
                     wet[idx] = s.Wet > 0.01f;
                     // Vertex colour carries clarity (white = clear) so the water shader can muddy marsh puddles.
