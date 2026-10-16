@@ -1,0 +1,105 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="StandardMaterial3D" id="1"]
+albedo_color = Color(0.38, 0.32, 0.24, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="2"]
+albedo_color = Color(0.831, 0.706, 0.514, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="3"]
+albedo_color = Color(0.56, 0.45, 0.30, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="4"]
+albedo_color = Color(0.32, 0.48, 0.20, 1)
+roughness = 0.90
+
+[sub_resource type="StandardMaterial3D" id="8"]
+albedo_color = Color(0.24, 0.56, 0.26, 1)
+roughness = 0.90
+
+[sub_resource type="CylinderMesh" id="5"]
+top_radius = 0.88
+bottom_radius = 0.82
+height = 0.24
+radial_segments = 6
+
+[sub_resource type="CylinderMesh" id="6"]
+top_radius = 0.76
+bottom_radius = 0.76
+height = 0.06
+radial_segments = 6
+
+[sub_resource type="BoxMesh" id="7"]
+size = Vector3(0.62, 0.02, 0.28)
+
+[node name="BeachTile" type="Node3D"]
+
+[node name="Cliff" type="MeshInstance3D" parent="."]
+mesh = SubResource("5")
+material_override = SubResource("1")
+rotation = Vector3(0, 0.523599, 0)
+position = Vector3(0, 0.02, 0)
+
+[node name="Top" type="MeshInstance3D" parent="."]
+mesh = SubResource("6")
+material_override = SubResource("2")
+rotation = Vector3(0, 0.523599, 0)
+position = Vector3(0, 0.16, 0)
+
+[node name="Shore" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("3")
+position = Vector3(0.18, 0.18, 0.22)
+rotation = Vector3(0, -0.42, 0)
+
+[node name="GrassPatch" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("4")
+position = Vector3(-0.20, 0.19, -0.10)
+scale = Vector3(0.6, 1.0, 0.6)
+rotation = Vector3(0, 0.35, 0)
+
+[node name="Palm1Trunk" type="MeshInstance3D" parent="."]
+mesh = SubResource("5")
+material_override = SubResource("3")
+position = Vector3(-0.16, 0.34, -0.06)
+scale = Vector3(0.10, 1.15, 0.10)
+rotation = Vector3(0.25, 0.0, -0.28)
+
+[node name="Palm1LeafA" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("8")
+position = Vector3(-0.18, 0.56, -0.08)
+scale = Vector3(0.35, 1.0, 0.12)
+rotation = Vector3(0.0, 0.2, 0.5)
+
+[node name="Palm1LeafB" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("8")
+position = Vector3(-0.18, 0.56, -0.08)
+scale = Vector3(0.35, 1.0, 0.12)
+rotation = Vector3(0.0, 1.7, -0.5)
+
+[node name="Palm2Trunk" type="MeshInstance3D" parent="."]
+mesh = SubResource("5")
+material_override = SubResource("3")
+position = Vector3(0.18, 0.32, 0.06)
+scale = Vector3(0.09, 1.0, 0.09)
+rotation = Vector3(-0.18, 0.0, 0.24)
+
+[node name="Palm2LeafA" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("8")
+position = Vector3(0.20, 0.52, 0.10)
+scale = Vector3(0.30, 1.0, 0.10)
+rotation = Vector3(0.0, 0.6, 0.42)
+
+[node name="Palm2LeafB" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("8")
+position = Vector3(0.20, 0.52, 0.10)
+scale = Vector3(0.30, 1.0, 0.10)
+rotation = Vector3(0.0, 2.2, -0.42)

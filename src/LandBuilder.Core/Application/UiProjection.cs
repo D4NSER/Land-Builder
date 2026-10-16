@@ -15,14 +15,10 @@ public static class UiProjectionBuilder
 {
     public static UiProjection Build(GameState state)
     {
-        var slots = new List<SlotProjection>();
-        for (var i = 0; i < GameState.BoardWidth * GameState.BoardHeight; i++)
-        {
-            if (state.Board.TryGetValue(i, out var placed))
-                slots.Add(new SlotProjection(i, $"{placed.TileType} (r{placed.RotationQuarterTurns})"));
-            else
-                slots.Add(new SlotProjection(i, "Empty"));
-        }
+        var slots = state.Board
+            .OrderBy(x => x.Key)
+            .Select(x => new SlotProjection(x.Key, $"{x.Value.TileType} (r{x.Value.RotationQuarterTurns})"))
+            .ToList();
 
         return new UiProjection(
             state.Coins,

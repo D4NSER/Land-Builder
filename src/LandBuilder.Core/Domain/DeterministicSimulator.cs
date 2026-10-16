@@ -4,12 +4,22 @@ public sealed class DeterministicSimulator
 {
     private static readonly IReadOnlyList<TileDefinition> TileDeck = new List<TileDefinition>
     {
-        new(TileType.Plains, EdgeType.Field, EdgeType.Field, EdgeType.Field, EdgeType.Field, 2, 1),
-        new(TileType.Woods, EdgeType.Forest, EdgeType.Forest, EdgeType.Field, EdgeType.Field, 3, 1),
-        new(TileType.River, EdgeType.Water, EdgeType.Water, EdgeType.Field, EdgeType.Field, 3, 2),
-        new(TileType.Village, EdgeType.Town, EdgeType.Field, EdgeType.Field, EdgeType.Town, 4, 2),
-        new(TileType.Meadow, EdgeType.Field, EdgeType.Forest, EdgeType.Field, EdgeType.Forest, 3, 1),
-        new(TileType.Lake, EdgeType.Water, EdgeType.Field, EdgeType.Water, EdgeType.Field, 4, 2)
+        new(TileType.Plains, EdgeType.Plains, 0, 1),
+        new(TileType.Woods, EdgeType.Forest, 0, 1),
+        new(TileType.River, EdgeType.Beach, 0, 1),
+        new(TileType.Village, EdgeType.City, 0, 1),
+        new(TileType.Meadow, EdgeType.Farmland, 0, 1),
+        new(TileType.Lake, EdgeType.Mountain, 0, 1),
+        new(TileType.Desert, EdgeType.Desert, 0, 1),
+        new(TileType.Snow, EdgeType.Snow, 0, 1),
+        new(TileType.Volcano, EdgeType.Mountain, 0, 1),
+        new(TileType.Pond, EdgeType.Water, 0, 1),
+        new(TileType.Ruins, EdgeType.City, 0, 1),
+        new(TileType.Swamp, EdgeType.Swamp, 0, 1),
+        new(TileType.Savanna, EdgeType.Savanna, 0, 1),
+        new(TileType.Tundra, EdgeType.Tundra, 0, 1),
+        new(TileType.Coral, EdgeType.Coral, 0, 1),
+        new(TileType.Mushroom, EdgeType.Mushroom, 0, 1)
     };
 
     public (GameState NextState, IReadOnlyList<IDomainEvent> Events) Apply(GameState state, IGameCommand command)
@@ -48,31 +58,6 @@ public sealed class DeterministicSimulator
         x ^= x << 25;
         x ^= x >> 27;
         return x * 2685821657736338717UL;
-    }
-
-    private static (int X, int Y) ToXY(int slot) => (slot % GameState.BoardWidth, slot / GameState.BoardWidth);
-
-    private static bool InBounds(int slot) => slot >= 0 && slot < GameState.BoardWidth * GameState.BoardHeight;
-
-    private static IEnumerable<(int Slot, string Dir)> NeighborSlots(int slot)
-    {
-        var (x, y) = ToXY(slot);
-        if (y > 0) yield return (slot - GameState.BoardWidth, "N");
-        if (x < GameState.BoardWidth - 1) yield return (slot + 1, "E");
-        if (y < GameState.BoardHeight - 1) yield return (slot + GameState.BoardWidth, "S");
-        if (x > 0) yield return (slot - 1, "W");
-    }
-
-    private static (EdgeType N, EdgeType E, EdgeType S, EdgeType W) RotatedEdges(TileDefinition d, int r)
-    {
-        var rot = ((r % 4) + 4) % 4;
-        return rot switch
-        {
-            0 => (d.North, d.East, d.South, d.West),
-            1 => (d.West, d.North, d.East, d.South),
-            2 => (d.South, d.West, d.North, d.East),
-            _ => (d.East, d.South, d.West, d.North)
-        };
     }
 
     private void ApplyDraw(GameState state, List<IDomainEvent> events)
@@ -125,12 +110,6 @@ public sealed class DeterministicSimulator
 
     private void ApplyPlace(GameState state, PlaceTileCommand place, List<IDomainEvent> events)
     {
-        if (!InBounds(place.SlotIndex))
-        {
-            Reject(state, events, place.SlotIndex, PlacementRejectionReason.OutOfBounds, "Slot is outside the board.");
-            return;
-        }
-
         if (state.CurrentTile is null)
         {
             Reject(state, events, place.SlotIndex, PlacementRejectionReason.NoTileInHand, "Draw a tile before placement.");
@@ -144,45 +123,44 @@ public sealed class DeterministicSimulator
         }
 
         var def = GetDefinition(state.CurrentTile.Value);
-        var edges = RotatedEdges(def, place.RotationQuarterTurns);
-
+        var sectorPattern = TileSectorGenerator.Generate(state.CurrentTile.Value, state.RngState, state.ThemeContext);
+        state.RngState = NextRng(state.RngState);
+        var adjacentTiles = 0;
         var matches = 0;
-        foreach (var (nSlot, dir) in NeighborSlots(place.SlotIndex))
+        foreach (var neighborSlot in HexGrid.GetNeighborSlots(place.SlotIndex))
         {
-            if (!state.Board.TryGetValue(nSlot, out var neighbor))
+            if (!state.Board.TryGetValue(neighborSlot, out var neighbor))
                 continue;
 
-            var nDef = GetDefinition(neighbor.TileType);
-            var nEdges = RotatedEdges(nDef, neighbor.RotationQuarterTurns);
+            adjacentTiles += 1;
+            var sourceEdge = GameState.GetEdgeIndexFacingNeighbor(place.SlotIndex, neighborSlot);
+            var neighborEdge = GameState.GetEdgeIndexFacingNeighbor(neighborSlot, place.SlotIndex);
+            if (sourceEdge < 0 || neighborEdge < 0)
+                continue;
 
-            var compatible = dir switch
-            {
-                "N" => edges.N == nEdges.S,
-                "E" => edges.E == nEdges.W,
-                "S" => edges.S == nEdges.N,
-                _ => edges.W == nEdges.E
-            };
+            var sourceTerrain = sectorPattern.GetEdgeTerrain(sourceEdge, place.RotationQuarterTurns);
+            var neighborTerrain = neighbor.ResolvedSectorPattern.GetEdgeTerrain(neighborEdge, neighbor.RotationQuarterTurns);
+            if (GameState.AreTerrainTypesCompatible(sourceTerrain, neighborTerrain))
+                matches += 1;
+        }
 
-            if (!compatible)
-            {
-                Reject(state, events, place.SlotIndex, PlacementRejectionReason.IncompatibleAdjacent, "Adjacent edges are incompatible.");
-                return;
-            }
-
-            matches += 1;
+        if (state.Board.Count > 0 && adjacentTiles == 0)
+        {
+            Reject(state, events, place.SlotIndex, PlacementRejectionReason.IncompatibleAdjacent, "Tile must connect to the existing island.");
+            return;
         }
 
         var gain = def.BaseCoins + (matches * def.MatchBonusPerEdge);
-        state.Board[place.SlotIndex] = new PlacedTile(state.CurrentTile.Value, ((place.RotationQuarterTurns % 4) + 4) % 4);
+        var normalizedRotation = ((place.RotationQuarterTurns % 6) + 6) % 6;
+        state.Board[place.SlotIndex] = new PlacedTile(state.CurrentTile.Value, normalizedRotation, sectorPattern);
         state.Coins += gain;
         var placedType = state.CurrentTile.Value;
         state.CurrentTile = null;
         state.LastMessage = $"Placed {placedType} on slot {place.SlotIndex}. +{gain} coins.";
 
-        events.Add(new TilePlacedEvent(place.SlotIndex, placedType, ((place.RotationQuarterTurns % 4) + 4) % 4, gain));
+        events.Add(new TilePlacedEvent(place.SlotIndex, placedType, normalizedRotation, gain));
         events.Add(new CoinsEarnedEvent(gain, "tile_place"));
     }
-
     private static void Reject(GameState state, List<IDomainEvent> events, int slot, PlacementRejectionReason reason, string message)
     {
         state.LastMessage = message;

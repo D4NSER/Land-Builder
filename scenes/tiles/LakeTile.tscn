@@ -1,0 +1,47 @@
+[gd_scene load_steps=6 format=3]
+
+[sub_resource type="StandardMaterial3D" id="1"]
+albedo_color = Color(0.26, 0.40, 0.46, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="2"]
+albedo_color = Color(0.290, 0.565, 0.722, 1)
+metallic = 0.12
+roughness = 0.08
+
+[sub_resource type="CylinderMesh" id="3"]
+top_radius = 0.88
+bottom_radius = 0.80
+height = 0.32
+radial_segments = 6
+
+[sub_resource type="CylinderMesh" id="4"]
+top_radius = 0.76
+bottom_radius = 0.76
+height = 0.08
+radial_segments = 6
+
+[sub_resource type="CylinderMesh" id="5"]
+top_radius = 0.68
+bottom_radius = 0.68
+height = 0.03
+radial_segments = 24
+
+[node name="LakeTile" type="Node3D"]
+
+[node name="Cliff" type="MeshInstance3D" parent="."]
+mesh = SubResource("3")
+material_override = SubResource("1")
+rotation = Vector3(0, 0.523599, 0)
+position = Vector3(0, 0.06, 0)
+
+[node name="Top" type="MeshInstance3D" parent="."]
+mesh = SubResource("4")
+material_override = SubResource("2")
+rotation = Vector3(0, 0.523599, 0)
+position = Vector3(0, 0.24, 0)
+
+[node name="WaterInset" type="MeshInstance3D" parent="."]
+mesh = SubResource("5")
+material_override = SubResource("2")
+position = Vector3(0, 0.28, 0)

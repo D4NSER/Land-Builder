@@ -25,18 +25,23 @@ public class LandBuilderScoringAndHighScoreTests
     {
         var expected = new (TileType Tile, int Score)[]
         {
-            (TileType.Plains, 1),
-            (TileType.Woods, 2),
-            (TileType.River, 3),
-            (TileType.Meadow, 4),
-            (TileType.Village, 5),
-            (TileType.Lake, 6)
+            (TileType.Plains, 0),
+            (TileType.Woods, 0),
+            (TileType.River, 0),
+            (TileType.Meadow, 0),
+            (TileType.Village, 0),
+            (TileType.Lake, 0),
+            (TileType.Desert, 0),
+            (TileType.Snow, 0),
+            (TileType.Volcano, 0),
+            (TileType.Pond, 0),
+            (TileType.Ruins, 0)
         };
 
         foreach (var (tile, score) in expected)
         {
             var state = GameState.CreateInitial(1);
-            state.Board[4] = new PlacedTile(tile, 3);
+            state.Board[HexGrid.OriginSlotIndex] = new PlacedTile(tile, 3);
             Assert.Equal(score, state.Score);
         }
     }
@@ -45,23 +50,24 @@ public class LandBuilderScoringAndHighScoreTests
     public void Score_AdjacencyBonus_CountsPairsOnce()
     {
         var state = GameState.CreateInitial(1);
-        state.Board[0] = new PlacedTile(TileType.Plains, 0);
-        state.Board[1] = new PlacedTile(TileType.Plains, 1);
-        state.Board[2] = new PlacedTile(TileType.Plains, 2);
+        state.Board[HexGrid.Encode(new HexCoord(0, 0))] = new PlacedTile(TileType.Plains, 0);
+        state.Board[HexGrid.Encode(new HexCoord(1, 0))] = new PlacedTile(TileType.Plains, 1);
+        state.Board[HexGrid.Encode(new HexCoord(2, 0))] = new PlacedTile(TileType.Plains, 2);
 
-        // Base = 3, same-type adjacent pairs = (0,1) and (1,2) => +4.
-        Assert.Equal(7, state.Score);
+        Assert.Equal(2, state.Score);
     }
 
     [Fact]
-    public void Score_FullBoardBonus_AppliesWhenFilled()
+    public void Score_EdgeGroups_MatchByTerrainGroup()
     {
         var state = GameState.CreateInitial(1);
-        for (var i = 0; i < GameState.BoardWidth * GameState.BoardHeight; i++)
-            state.Board[i] = new PlacedTile(TileType.Plains, i % 4);
+        state.Board[HexGrid.Encode(new HexCoord(0, 0))] = new PlacedTile(TileType.Lake, 0);
+        state.Board[HexGrid.Encode(new HexCoord(1, 0))] = new PlacedTile(TileType.Volcano, 0);
+        state.Board[HexGrid.Encode(new HexCoord(0, 1))] = new PlacedTile(TileType.Pond, 0);
+        state.Board[HexGrid.Encode(new HexCoord(-1, 1))] = new PlacedTile(TileType.Ruins, 0);
+        state.Board[HexGrid.Encode(new HexCoord(-1, 0))] = new PlacedTile(TileType.Village, 0);
 
-        // Base 9 + adjacency (12 pairs * 2) + full board bonus 10.
-        Assert.Equal(43, state.Score);
+        Assert.Equal(2, state.Score);
     }
 
     [Fact]
@@ -229,7 +235,7 @@ public class LandBuilderScoringAndHighScoreTests
             Assert.Single(sink.Events.OfType<HighScoreUpdatedEvent>());
 
             var lowerState = GameState.CreateInitial(1);
-            lowerState.Board[0] = new PlacedTile(TileType.Plains, 0); // score = 1
+            lowerState.Board[HexGrid.OriginSlotIndex] = new PlacedTile(TileType.Plains, 0); // score = 0
             var lowerSession = new GameSession(lowerState, sink, highScoreRepo, path);
             lowerSession.IssueCommand(new SubmitScoreCommand());
 
@@ -292,10 +298,10 @@ public class LandBuilderScoringAndHighScoreTests
         var state = GameState.CreateInitial(10);
         state.Coins = 100;
         state.SetUnlockedTiles(GameState.AllTileTypes);
-        state.Board[0] = new PlacedTile(TileType.Plains, 0);
-        state.Board[1] = new PlacedTile(TileType.Plains, 1); // +2 adjacency with slot 0
-        state.Board[4] = new PlacedTile(TileType.Village, 0);
-        state.Board[8] = new PlacedTile(TileType.Lake, 2);
+        state.Board[HexGrid.Encode(new HexCoord(0, 0))] = new PlacedTile(TileType.Plains, 0);
+        state.Board[HexGrid.Encode(new HexCoord(1, 0))] = new PlacedTile(TileType.Plains, 1);
+        state.Board[HexGrid.Encode(new HexCoord(0, 1))] = new PlacedTile(TileType.Village, 0);
+        state.Board[HexGrid.Encode(new HexCoord(2, 0))] = new PlacedTile(TileType.Lake, 2);
         return state;
     }
 

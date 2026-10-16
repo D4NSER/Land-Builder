@@ -21,7 +21,3 @@ project/assembly_name="LandBuilder.Presentation"
 [physics]
 
 common/physics_ticks_per_second=30
-
-[rendering]
-
-renderer/rendering_method="mobile"

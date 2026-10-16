@@ -5,7 +5,7 @@ namespace LandBuilder.Infrastructure;
 
 public sealed class SaveRepository
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private const int LegacyStage14SchemaVersion = 2;
     private const int LegacyStage13SchemaVersion = 1;
 
@@ -22,6 +22,7 @@ public sealed class SaveRepository
             Coins = state.Coins,
             RngState = state.RngState,
             RngStep = state.RngStep,
+            ThemeContext = state.ThemeContext,
             CurrentTile = state.CurrentTile,
             LastMessage = state.LastMessage,
             Score = state.Score,
@@ -30,7 +31,8 @@ public sealed class SaveRepository
             {
                 SlotIndex = x.Key,
                 TileType = x.Value.TileType,
-                RotationQuarterTurns = x.Value.RotationQuarterTurns
+                RotationQuarterTurns = x.Value.RotationQuarterTurns,
+                SectorPattern = x.Value.SectorPattern
             }).ToList()
         };
 
@@ -94,11 +96,12 @@ public sealed class SaveRepository
             Coins = payload.Coins,
             RngState = payload.RngState,
             RngStep = payload.RngStep,
+            ThemeContext = payload.SchemaVersion == CurrentSchemaVersion ? payload.ThemeContext : TileSectorGenerator.ThemeContext.None,
             CurrentTile = payload.CurrentTile,
             LastMessage = payload.LastMessage ?? "Loaded.",
             Board = payload.Board?.ToDictionary(
                 x => x.SlotIndex,
-                x => new PlacedTile(x.TileType, x.RotationQuarterTurns)) ?? new Dictionary<int, PlacedTile>()
+                x => new PlacedTile(x.TileType, x.RotationQuarterTurns, x.SectorPattern)) ?? new Dictionary<int, PlacedTile>()
         };
         state.SetUnlockedTiles(unlockedTiles ?? Array.Empty<TileType>());
 
@@ -126,6 +129,7 @@ public sealed class SaveRepository
         public long Coins { get; set; }
         public ulong RngState { get; set; }
         public int RngStep { get; set; }
+        public TileSectorGenerator.ThemeContext ThemeContext { get; set; }
         public TileType? CurrentTile { get; set; }
         public string? LastMessage { get; set; }
         public int? Score { get; set; }
@@ -138,5 +142,6 @@ public sealed class SaveRepository
         public int SlotIndex { get; set; }
         public TileType TileType { get; set; }
         public int RotationQuarterTurns { get; set; }
+        public SectorPattern? SectorPattern { get; set; }
     }
 }

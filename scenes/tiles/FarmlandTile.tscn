@@ -1,0 +1,70 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="StandardMaterial3D" id="1"]
+albedo_color = Color(0.46, 0.40, 0.24, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="2"]
+albedo_color = Color(0.659, 0.753, 0.376, 1)
+roughness = 0.90
+
+[sub_resource type="StandardMaterial3D" id="3"]
+albedo_color = Color(0.36, 0.54, 0.20, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="4"]
+albedo_color = Color(0.48, 0.34, 0.18, 1)
+roughness = 0.96
+
+[sub_resource type="CylinderMesh" id="5"]
+top_radius = 0.88
+bottom_radius = 0.80
+height = 0.30
+radial_segments = 6
+
+[sub_resource type="CylinderMesh" id="6"]
+top_radius = 0.76
+bottom_radius = 0.76
+height = 0.08
+radial_segments = 6
+
+[sub_resource type="BoxMesh" id="7"]
+size = Vector3(0.56, 0.015, 0.08)
+
+[node name="FarmlandTile" type="Node3D"]
+
+[node name="Cliff" type="MeshInstance3D" parent="."]
+mesh = SubResource("5")
+material_override = SubResource("1")
+rotation = Vector3(0, 0.523599, 0)
+position = Vector3(0, 0.06, 0)
+
+[node name="Top" type="MeshInstance3D" parent="."]
+mesh = SubResource("6")
+material_override = SubResource("2")
+rotation = Vector3(0, 0.523599, 0)
+position = Vector3(0, 0.22, 0)
+
+[node name="CropRow1" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("3")
+position = Vector3(0.0, 0.26, -0.18)
+rotation = Vector3(0, 0.2, 0)
+
+[node name="CropRow2" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("4")
+position = Vector3(0.0, 0.26, -0.06)
+rotation = Vector3(0, 0.2, 0)
+
+[node name="CropRow3" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("3")
+position = Vector3(0.0, 0.26, 0.06)
+rotation = Vector3(0, 0.2, 0)
+
+[node name="CropRow4" type="MeshInstance3D" parent="."]
+mesh = SubResource("7")
+material_override = SubResource("4")
+position = Vector3(0.0, 0.26, 0.18)
+rotation = Vector3(0, 0.2, 0)

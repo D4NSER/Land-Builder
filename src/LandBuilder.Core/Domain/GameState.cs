@@ -2,10 +2,20 @@ namespace LandBuilder.Domain;
 
 public enum EdgeType
 {
-    Field = 0,
+    Plains = 0,
     Forest = 1,
-    Water = 2,
-    Town = 3
+    Beach = 2,
+    City = 3,
+    Farmland = 4,
+    Mountain = 5,
+    Desert = 6,
+    Snow = 7,
+    Water = 8,
+    Swamp = 9,
+    Savanna = 10,
+    Tundra = 11,
+    Coral = 12,
+    Mushroom = 13
 }
 
 public enum TileType
@@ -15,7 +25,17 @@ public enum TileType
     River = 2,
     Village = 3,
     Meadow = 4,
-    Lake = 5
+    Lake = 5,
+    Desert = 6,
+    Snow = 7,
+    Volcano = 8,
+    Pond = 9,
+    Ruins = 10,
+    Swamp = 11,
+    Savanna = 12,
+    Tundra = 13,
+    Coral = 14,
+    Mushroom = 15
 }
 
 public enum PlacementRejectionReason
@@ -28,15 +48,55 @@ public enum PlacementRejectionReason
 
 public sealed record TileDefinition(
     TileType TileType,
-    EdgeType North,
-    EdgeType East,
-    EdgeType South,
-    EdgeType West,
+    EdgeType EdgeType,
     int BaseCoins,
     int MatchBonusPerEdge
 );
 
-public sealed record PlacedTile(TileType TileType, int RotationQuarterTurns);
+public readonly record struct SectorPattern(
+    TileType S0,
+    TileType S1,
+    TileType S2,
+    TileType S3,
+    TileType S4,
+    TileType S5)
+{
+    public TileType this[int index] => index switch
+    {
+        0 => S0,
+        1 => S1,
+        2 => S2,
+        3 => S3,
+        4 => S4,
+        5 => S5,
+        _ => throw new ArgumentOutOfRangeException(nameof(index), index, "Sector index must be 0..5.")
+    };
+
+    public TileType[] ToArray() => [S0, S1, S2, S3, S4, S5];
+
+    public TileType GetEdgeTerrain(int edgeIndex, int rotationSteps)
+    {
+        var normalized = ((edgeIndex + rotationSteps) % 6 + 6) % 6;
+        return this[normalized];
+    }
+
+    public TileType GetDominantTerrain()
+    {
+        return ToArray()
+            .GroupBy(x => x)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key)
+            .First()
+            .Key;
+    }
+
+    public static SectorPattern Pure(TileType tileType) => new(tileType, tileType, tileType, tileType, tileType, tileType);
+}
+
+public sealed record PlacedTile(TileType TileType, int RotationQuarterTurns, SectorPattern? SectorPattern = null)
+{
+    public SectorPattern ResolvedSectorPattern => SectorPattern ?? Domain.SectorPattern.Pure(TileType);
+}
 
 public sealed class GameState : IEquatable<GameState>
 {
@@ -48,6 +108,7 @@ public sealed class GameState : IEquatable<GameState>
     public long Coins { get; set; }
     public ulong RngState { get; set; }
     public int RngStep { get; set; }
+    public TileSectorGenerator.ThemeContext ThemeContext { get; set; }
     public TileType? CurrentTile { get; set; }
     public Dictionary<int, PlacedTile> Board { get; set; } = new();
     public string LastMessage { get; set; } = "Ready";
@@ -62,17 +123,17 @@ public sealed class GameState : IEquatable<GameState>
         [TileType.River] = 20,
         [TileType.Meadow] = 30,
         [TileType.Village] = 40,
-        [TileType.Lake] = 50
-    };
-
-    public static IReadOnlyDictionary<TileType, int> ScoreBasePoints { get; } = new Dictionary<TileType, int>
-    {
-        [TileType.Plains] = 1,
-        [TileType.Woods] = 2,
-        [TileType.River] = 3,
-        [TileType.Meadow] = 4,
-        [TileType.Village] = 5,
-        [TileType.Lake] = 6
+        [TileType.Lake] = 50,
+        [TileType.Desert] = 60,
+        [TileType.Snow] = 70,
+        [TileType.Volcano] = 80,
+        [TileType.Pond] = 90,
+        [TileType.Ruins] = 100,
+        [TileType.Swamp] = 110,
+        [TileType.Savanna] = 120,
+        [TileType.Tundra] = 130,
+        [TileType.Coral] = 140,
+        [TileType.Mushroom] = 150
     };
 
     public int Score => ComputeScore(Board);
@@ -84,6 +145,7 @@ public sealed class GameState : IEquatable<GameState>
             Coins = 0,
             RngState = seed,
             RngStep = 0,
+            ThemeContext = TileSectorGenerator.ThemeContext.None,
             CurrentTile = null,
             Board = new Dictionary<int, PlacedTile>(),
             LastMessage = "Draw a tile to begin."
@@ -97,6 +159,7 @@ public sealed class GameState : IEquatable<GameState>
             Coins = Coins,
             RngState = RngState,
             RngStep = RngStep,
+            ThemeContext = ThemeContext,
             CurrentTile = CurrentTile,
             LastMessage = LastMessage,
             Board = Board.ToDictionary(k => k.Key, v => v.Value)
@@ -140,6 +203,7 @@ public sealed class GameState : IEquatable<GameState>
         Coins = snapshot.Coins;
         RngState = snapshot.RngState;
         RngStep = snapshot.RngStep;
+        ThemeContext = snapshot.ThemeContext;
         CurrentTile = snapshot.CurrentTile;
         Board = snapshot.Board.ToDictionary(k => k.Key, v => v.Value);
         LastMessage = snapshot.LastMessage;
@@ -154,6 +218,7 @@ public sealed class GameState : IEquatable<GameState>
         if (Coins != other.Coins ||
             RngState != other.RngState ||
             RngStep != other.RngStep ||
+            ThemeContext != other.ThemeContext ||
             CurrentTile != other.CurrentTile ||
             Score != other.Score ||
             LastMessage != other.LastMessage ||
@@ -183,6 +248,7 @@ public sealed class GameState : IEquatable<GameState>
         hash.Add(Coins);
         hash.Add(RngState);
         hash.Add(RngStep);
+        hash.Add(ThemeContext);
         hash.Add(CurrentTile);
         hash.Add(Score);
         hash.Add(LastMessage);
@@ -201,39 +267,90 @@ public sealed class GameState : IEquatable<GameState>
     {
         var score = 0;
 
-        foreach (var placed in board.Values)
+        foreach (var kv in board)
         {
-            if (!ScoreBasePoints.TryGetValue(placed.TileType, out var points))
-                throw new InvalidOperationException($"Missing score rule for tile type {placed.TileType}.");
-
-            score += points;
-        }
-
-        foreach (var kv in board.OrderBy(x => x.Key))
-        {
-            var slot = kv.Key;
-            var tileType = kv.Value.TileType;
-            var x = slot % BoardWidth;
-            var y = slot / BoardWidth;
-
-            if (x < BoardWidth - 1 &&
-                board.TryGetValue(slot + 1, out var right) &&
-                right.TileType == tileType)
+            var source = kv.Value;
+            foreach (var neighborSlot in HexGrid.GetNeighborSlots(kv.Key))
             {
-                score += 2;
-            }
+                if (!board.TryGetValue(neighborSlot, out var neighbor))
+                    continue;
 
-            if (y < BoardHeight - 1 &&
-                board.TryGetValue(slot + BoardWidth, out var down) &&
-                down.TileType == tileType)
-            {
-                score += 2;
+                if (neighborSlot < kv.Key)
+                    continue;
+
+                var sourceEdge = GetEdgeIndexFacingNeighbor(kv.Key, neighborSlot);
+                var neighborEdge = GetEdgeIndexFacingNeighbor(neighborSlot, kv.Key);
+                if (sourceEdge < 0 || neighborEdge < 0)
+                    continue;
+
+                var sourceTerrain = source.ResolvedSectorPattern.GetEdgeTerrain(sourceEdge, source.RotationQuarterTurns);
+                var neighborTerrain = neighbor.ResolvedSectorPattern.GetEdgeTerrain(neighborEdge, neighbor.RotationQuarterTurns);
+                if (AreTerrainTypesCompatible(sourceTerrain, neighborTerrain))
+                    score += 1;
             }
         }
-
-        if (board.Count == BoardWidth * BoardHeight)
-            score += 10;
 
         return score;
+    }
+
+    public static int GetEdgeIndexFacingNeighbor(int slotIndex, int neighborSlot)
+    {
+        var source = HexGrid.Decode(slotIndex);
+        var target = HexGrid.Decode(neighborSlot);
+        var dq = target.Q - source.Q;
+        var dr = target.R - source.R;
+        return (dq, dr) switch
+        {
+            (1, 0) => 0,
+            (1, -1) => 1,
+            (0, -1) => 2,
+            (-1, 0) => 3,
+            (-1, 1) => 4,
+            (0, 1) => 5,
+            _ => -1
+        };
+    }
+
+    public static EdgeType GetEdgeType(TileType tileType) => tileType switch
+    {
+        TileType.Plains => EdgeType.Plains,
+        TileType.Woods => EdgeType.Forest,
+        TileType.River => EdgeType.Beach,
+        TileType.Village => EdgeType.City,
+        TileType.Meadow => EdgeType.Farmland,
+        TileType.Lake => EdgeType.Mountain,
+        TileType.Desert => EdgeType.Desert,
+        TileType.Snow => EdgeType.Snow,
+        TileType.Volcano => EdgeType.Mountain,
+        TileType.Pond => EdgeType.Water,
+        TileType.Ruins => EdgeType.City,
+        TileType.Swamp => EdgeType.Swamp,
+        TileType.Savanna => EdgeType.Savanna,
+        TileType.Tundra => EdgeType.Tundra,
+        TileType.Coral => EdgeType.Coral,
+        TileType.Mushroom => EdgeType.Mushroom,
+        _ => throw new ArgumentOutOfRangeException(nameof(tileType), tileType, "Unknown tile edge type.")
+    };
+
+    public static bool AreTerrainTypesCompatible(TileType a, TileType b)
+    {
+        if (GetEdgeType(a) == GetEdgeType(b))
+            return true;
+
+        return (a, b) switch
+        {
+            (TileType.Plains, TileType.Meadow) or (TileType.Meadow, TileType.Plains) => true,
+            (TileType.Plains, TileType.Savanna) or (TileType.Savanna, TileType.Plains) => true,
+            (TileType.Woods, TileType.Swamp) or (TileType.Swamp, TileType.Woods) => true,
+            (TileType.Woods, TileType.Mushroom) or (TileType.Mushroom, TileType.Woods) => true,
+            (TileType.Lake, TileType.Volcano) or (TileType.Volcano, TileType.Lake) => true,
+            (TileType.Lake, TileType.Tundra) or (TileType.Tundra, TileType.Lake) => true,
+            (TileType.River, TileType.Coral) or (TileType.Coral, TileType.River) => true,
+            (TileType.River, TileType.Pond) or (TileType.Pond, TileType.River) => true,
+            (TileType.Snow, TileType.Tundra) or (TileType.Tundra, TileType.Snow) => true,
+            (TileType.Village, TileType.Ruins) or (TileType.Ruins, TileType.Village) => true,
+            (TileType.Desert, TileType.Savanna) or (TileType.Savanna, TileType.Desert) => true,
+            _ => false
+        };
     }
 }

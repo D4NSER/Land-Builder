@@ -2,42 +2,43 @@
 
 [ext_resource type="Script" path="res://src/Presentation/MainController.cs" id="1"]
 
-[sub_resource type="Environment" id="1"]
-background_mode = 1
-background_color = Color(0.72, 0.85, 0.89, 1)
-ambient_light_source = 2
-ambient_light_color = Color(0.93, 0.92, 0.93, 1)
-ambient_light_energy = 0.46
-tonemap_mode = 2
-tonemap_exposure = 0.96
-ssao_enabled = true
-ssao_radius = 1.08
-ssao_intensity = 0.82
-ssao_power = 1.2
-ssil_enabled = true
-ssil_radius = 1.45
-ssil_intensity = 0.34
-fog_enabled = true
-fog_light_color = Color(0.88, 0.91, 0.94, 1)
-fog_light_energy = 0.12
-fog_density = 0.0028
-fog_sky_affect = 0.10
-volumetric_fog_enabled = true
-volumetric_fog_density = 0.0045
-volumetric_fog_albedo = Color(0.90, 0.91, 0.93, 1)
-glow_enabled = true
-glow_bloom = 0.01
-glow_intensity = 0.02
-
 [sub_resource type="ProceduralSkyMaterial" id="2"]
-sky_top_color = Color(0.75, 0.82, 0.87, 1)
-sky_horizon_color = Color(0.78, 0.89, 0.96, 1)
-ground_bottom_color = Color(0.69, 0.81, 0.85, 1)
-ground_horizon_color = Color(0.79, 0.88, 0.91, 1)
-energy_multiplier = 1.03
+sky_top_color = Color(0.74, 0.80, 0.88, 1)
+sky_horizon_color = Color(0.86, 0.91, 0.96, 1)
+ground_bottom_color = Color(0.65, 0.76, 0.80, 1)
+ground_horizon_color = Color(0.82, 0.88, 0.89, 1)
+energy_multiplier = 1.08
 
 [sub_resource type="Sky" id="3"]
 sky_material = SubResource("2")
+
+[sub_resource type="Environment" id="1"]
+background_mode = 2
+background_color = Color(0.70, 0.82, 0.88, 1)
+sky = SubResource("3")
+ambient_light_source = 2
+ambient_light_color = Color(0.92, 0.91, 0.90, 1)
+ambient_light_energy = 0.58
+tonemap_mode = 2
+tonemap_exposure = 0.88
+ssao_enabled = true
+ssao_radius = 1.18
+ssao_intensity = 0.74
+ssao_power = 1.15
+ssil_enabled = true
+ssil_radius = 1.62
+ssil_intensity = 0.26
+fog_enabled = true
+fog_light_color = Color(0.89, 0.90, 0.92, 1)
+fog_light_energy = 0.08
+fog_density = 0.0021
+fog_sky_affect = 0.08
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.0031
+volumetric_fog_albedo = Color(0.91, 0.91, 0.92, 1)
+glow_enabled = true
+glow_bloom = 0.005
+glow_intensity = 0.01
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1")
@@ -53,27 +54,27 @@ current = true
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 rotation = Vector3(-0.9, -0.45, 0)
-light_color = Color(1, 0.95, 0.87, 1)
-light_energy = 1.34
+light_color = Color(1, 0.94, 0.85, 1)
+light_energy = 1.46
 shadow_enabled = true
-shadow_bias = 0.016
-shadow_normal_bias = 1.0
+shadow_bias = 0.012
+shadow_normal_bias = 0.9
 directional_shadow_mode = 2
-directional_shadow_max_distance = 96.0
-shadow_blur = 0.7
-light_angular_distance = 0.4
+directional_shadow_max_distance = 120.0
+shadow_blur = 0.95
+light_angular_distance = 0.55
 
 [node name="FillLight" type="DirectionalLight3D" parent="."]
 rotation = Vector3(-1.2, 2.4, 0)
-light_color = Color(0.79, 0.89, 1, 1)
-light_energy = 0.25
+light_color = Color(0.76, 0.86, 0.98, 1)
+light_energy = 0.21
 shadow_enabled = false
 
 [node name="BounceLight" type="OmniLight3D" parent="."]
 position = Vector3(0, 2.2, 0)
-light_color = Color(0.98, 0.93, 0.89, 1)
-light_energy = 0.30
-omni_range = 9.0
+light_color = Color(0.98, 0.94, 0.90, 1)
+light_energy = 0.36
+omni_range = 10.5
 shadow_enabled = false
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
@@ -143,10 +144,6 @@ theme_override_constants/separation = 6
 [node name="PlayToolsLabel" type="Label" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
 text = "Play"
-
-[node name="DrawButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
-layout_mode = 2
-text = "Draw"
 
 [node name="SubmitScoreButton" type="Button" parent="CanvasLayer/HUDRoot/ActionsRail/RailVBox"]
 layout_mode = 2
@@ -221,7 +218,7 @@ anchor_right = 1.0
 offset_left = -312.0
 offset_top = 12.0
 offset_right = -12.0
-offset_bottom = 278.0
+offset_bottom = 330.0
 
 [node name="DeckVBox" type="VBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel"]
 layout_mode = 2
@@ -235,13 +232,15 @@ text = "Current Tile"
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="TileSwatchPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow"]
+[node name="TilePreviewPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(42, 42)
+custom_minimum_size = Vector2(120, 120)
 
-[node name="TileSwatchColor" type="ColorRect" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow/TileSwatchPanel"]
+[node name="TilePreviewTexture" type="TextureRect" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow/TilePreviewPanel"]
 layout_mode = 2
-color = Color(0.9, 0.95, 0.95, 1)
+custom_minimum_size = Vector2(120, 120)
+expand_mode = 1
+stretch_mode = 5
 
 [node name="TileCardText" type="VBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/TileCardRow"]
 layout_mode = 2
@@ -275,10 +274,67 @@ layout_mode = 2
 autowrap_mode = 3
 text = "Last:"
 
-[node name="StatusLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
+[node name="NextRow" type="HBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox"]
 layout_mode = 2
-autowrap_mode = 3
-text = "Status"
+theme_override_constants/separation = 8
+
+[node name="NextPreviewPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/NextRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(72, 72)
+
+[node name="NextPreviewTexture" type="TextureRect" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/NextRow/NextPreviewPanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(72, 72)
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NextText" type="VBoxContainer" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/NextRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NextLabel" type="Label" parent="CanvasLayer/HUDRoot/TileDeckPanel/DeckVBox/NextRow/NextText"]
+layout_mode = 2
+text = "Next"
+
+[node name="InHandPreviewViewport" type="SubViewport" parent="CanvasLayer/HUDRoot"]
+own_world_3d = true
+transparent_bg = false
+handle_input_locally = false
+size = Vector2i(120, 120)
+render_target_update_mode = 4
+
+[node name="PreviewSceneRoot" type="Node3D" parent="CanvasLayer/HUDRoot/InHandPreviewViewport"]
+
+[node name="PreviewWorldEnvironment" type="WorldEnvironment" parent="CanvasLayer/HUDRoot/InHandPreviewViewport"]
+
+[node name="PreviewCamera3D" type="Camera3D" parent="CanvasLayer/HUDRoot/InHandPreviewViewport"]
+transform = Transform3D(1, 0, 0, 0, 0.573576, 0.819152, 0, -0.819152, 0.573576, 0, 3.3, 2.3)
+current = true
+
+[node name="PreviewLight" type="DirectionalLight3D" parent="CanvasLayer/HUDRoot/InHandPreviewViewport"]
+transform = Transform3D(0.819152, 0.40558, -0.40558, 0, 0.707107, 0.707107, 0.573576, -0.579228, 0.579228, 0, 0, 0)
+light_energy = 1.25
+shadow_enabled = true
+
+[node name="NextPreviewViewport" type="SubViewport" parent="CanvasLayer/HUDRoot"]
+own_world_3d = true
+transparent_bg = false
+handle_input_locally = false
+size = Vector2i(72, 72)
+render_target_update_mode = 4
+
+[node name="PreviewSceneRoot" type="Node3D" parent="CanvasLayer/HUDRoot/NextPreviewViewport"]
+
+[node name="PreviewWorldEnvironment" type="WorldEnvironment" parent="CanvasLayer/HUDRoot/NextPreviewViewport"]
+
+[node name="PreviewCamera3D" type="Camera3D" parent="CanvasLayer/HUDRoot/NextPreviewViewport"]
+transform = Transform3D(1, 0, 0, 0, 0.573576, 0.819152, 0, -0.819152, 0.573576, 0, 3.3, 2.3)
+current = true
+
+[node name="PreviewLight" type="DirectionalLight3D" parent="CanvasLayer/HUDRoot/NextPreviewViewport"]
+transform = Transform3D(0.819152, 0.40558, -0.40558, 0, 0.707107, 0.707107, 0.573576, -0.579228, 0.579228, 0, 0, 0)
+light_energy = 1.25
+shadow_enabled = true
 
 [node name="EventPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot"]
 layout_mode = 1
@@ -332,3 +388,62 @@ theme_override_font_sizes/font_size = 28
 text = "↓"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="MenuOverlay" type="ColorRect" parent="CanvasLayer/HUDRoot"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0, 0, 0, 0.7)
+
+[node name="MenuPanel" type="PanelContainer" parent="CanvasLayer/HUDRoot/MenuOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -110.0
+offset_top = -90.0
+offset_right = 110.0
+offset_bottom = 90.0
+
+[node name="MenuVBox" type="VBoxContainer" parent="CanvasLayer/HUDRoot/MenuOverlay/MenuPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="MenuTitle" type="Label" parent="CanvasLayer/HUDRoot/MenuOverlay/MenuPanel/MenuVBox"]
+layout_mode = 2
+text = "Paused"
+horizontal_alignment = 1
+
+[node name="ResumeButton" type="Button" parent="CanvasLayer/HUDRoot/MenuOverlay/MenuPanel/MenuVBox"]
+layout_mode = 2
+text = "Resume"
+
+[node name="OverlayNewGameButton" type="Button" parent="CanvasLayer/HUDRoot/MenuOverlay/MenuPanel/MenuVBox"]
+layout_mode = 2
+text = "New Game"
+
+[node name="QuitButton" type="Button" parent="CanvasLayer/HUDRoot/MenuOverlay/MenuPanel/MenuVBox"]
+layout_mode = 2
+text = "Quit"
+
+[node name="ComboLabel" type="Label" parent="CanvasLayer/HUDRoot"]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.35
+anchor_right = 0.5
+anchor_bottom = 0.35
+offset_left = -120.0
+offset_top = -24.0
+offset_right = 120.0
+offset_bottom = 24.0
+horizontal_alignment = 1
+text = "COMBO x3"
