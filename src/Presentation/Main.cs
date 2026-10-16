@@ -548,6 +548,8 @@ public partial class Main : Node3D
 
     private void TryPlace()
     {
+        // Resolve the slot under the cursor now: a move and click can land in the same frame, before _Process refreshes hover.
+        UpdateHover();
         if (_mode != Mode.Playing || _hand is null || _hoverSlot is not int slot)
             return;
         Place(slot, _rotation);
