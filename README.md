@@ -6,9 +6,11 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 
 ![Gameplay](docs/screenshots/gameplay.jpg)
 
-| Title | Late in a run |
+| Title | Late in a run (Amber Vale) |
 | --- | --- |
 | ![Title screen](docs/screenshots/title.jpg) | ![Late game](docs/screenshots/late-game.jpg) |
+
+![World themes: Coral Coast, Amber Vale, Sunlit Plains, Northern Reach](docs/screenshots/themes.jpg)
 
 ## Playing
 
@@ -26,11 +28,13 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 | Fullscreen | `F11` |
 
 ### Rules and scoring
-- **Edges:** each tile has six wedges of terrain: meadow, forest, wheat field, village or lake, plus mountains and dunes once unlocked. Every edge that touches the same terrain scores **10 points**. Mismatches are allowed but score nothing.
+- **Edges:** each tile has six wedges of terrain: meadow, forest, wheat field, village or lake to start. Every edge that touches the same terrain scores **10 points**. Mismatches are allowed but score nothing.
+- **World themes:** every island rolls one of five themes: *Green Isles*, *Northern Reach*, *Coral Coast*, *Amber Vale* or *Sunlit Plains*. A theme changes the palette, trees, roofs, sea and sky, shifts which terrains show up, and decides which new terrains milestones unlock: Mountains, Dunes, Snowfields, Marsh or Orchards.
+- **Rivers:** unlocked at the second milestone on every island. River edges must meet another river or flow into a lake; a tile that can't legally go anywhere is set aside so you're never stuck.
 - **Perfect / Flawless:** touch 3+ tiles with every edge matching for a *Perfect* (bonus points + 1 tile). Fill a hole with all six edges matching for a *Flawless* (+100, +2 tiles).
 - **Streak:** clean fits against two or more tiles raise a multiplier (up to ×2.0). A mismatched edge resets it.
 - **Quests:** pins appear over forests, fields, villages and lakes. Grow the area to the target (or *exactly* to it) for points and extra tiles. A quest fails if its area gets closed in or overshoots an exact target.
-- **Milestones:** score thresholds award tiles and unlock Mountains (1st) and Dunes (3rd).
+- **Milestones:** score thresholds award tiles and unlock the theme's terrains and rivers.
 - **End of run:** the island is complete when the stack runs out. Runs autosave after every move, and **Continue** resumes them. Finished runs go on a local leaderboard.
 
 All tuning numbers live in [`GameRules.cs`](src/LandBuilder.Core/Domain/GameRules.cs). A bot-driven balance test keeps the pacing in band.
@@ -61,7 +65,14 @@ In-engine smoke test, which drives real mouse and keyboard events through the ga
 <godot-console-exe> --path . -- --selftest
 ```
 
-Other debug flags (after `--`): `--autoplay` (a bot plays continuously), `--title` (attract-mode title screen), `--capture-dir=<dir> --capture-every=<frames>` (periodic screenshots plus FPS logging). Automated runs write to `user://automation/` and never touch your real save or leaderboard.
+Other debug flags (after `--`):
+- `--autoplay`: a bot plays continuously. Add `--theme=Nordic` (or any theme) to force a theme.
+- `--title`: shows the attract-mode title screen.
+- `--capture-dir=<dir> --capture-every=<frames>`: saves periodic screenshots and logs FPS.
+- `--zoom-water-at=<frame> --zoom-terrain=<Terrain>`: freezes the bot and zooms in on a terrain.
+- `--lab [--lab-terrains] [--lab-far] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues.
+
+Automated runs write to `user://automation/` and never touch your real save or leaderboard.
 
 ## Code layout
 
@@ -69,7 +80,8 @@ Other debug flags (after `--`): `--autoplay` (a bot plays continuously), `--titl
 src/LandBuilder.Core/          Pure C# rules, no Godot dependency
   Domain/GameEngine.cs         Placement evaluation, scoring, quests, milestones, hint bot
   Domain/RegionMap.cs          Union-find over tile wedges for connected terrain areas
-  Domain/TileGenerator.cs      Contiguous-segment tile generation with terrain affinities
+  Domain/TileGenerator.cs      Contiguous-segment tile generation with terrain affinities and river overlays
+  Domain/WorldTheme.cs         Island themes: terrain weights and milestone unlock order
   Application/GameSession.cs   Current run, undo history, event fan-out
   Infrastructure/              Save (schema 5) and leaderboard persistence
 src/Presentation/              Godot layer
@@ -78,11 +90,12 @@ src/Presentation/              Godot layer
   TerrainSampler.cs            Blended per-wedge height and colour (world-space noise)
   TileMeshBuilder.cs           Ground, skirt and lake meshes
   PropBuilder.cs               Trees, houses, windmills, boats... merged per tile
-  WorldView.cs                 Sky, sun and day progression, ocean, seabed, clouds, birds
+  ThemeStyle.cs                Per-theme palettes, foliage, roofs, sea and sky
+  WorldView.cs                 Sky shader, sun and day progression, grading, ocean, seabed, clouds, birds, motes
   CameraRig.cs                 Eased orbit camera, auto-framing, shake, tilt-shift DOF
   Hud.cs / Menus.cs / UiKit.cs In-game HUD, menus and the shared UI theme
   Audio.cs                     Synthesised SFX, ambience and generative music
-shaders/                       terrain, props (pop-in + wind), water (depth foam)
+shaders/                       terrain, props (pop-in + wind), water (depth foam, murk), sky (clouds), vignette
 tests/LandBuilder.Tests/       xUnit tests for the Core
 ```
 

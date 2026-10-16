@@ -11,7 +11,7 @@ public sealed class GameRulesTests
     /// <summary>A state with a hand-picked board and tile in hand, no quests and a healthy stack.</summary>
     private static GameState Board(TileSpec hand, params (int Slot, TileSpec Tile, int Rotation)[] tiles)
     {
-        var state = GameState.CreateInitial(42);
+        var state = GameState.CreateInitial(42, WorldTheme.Temperate);
         state.Board.Clear();
         foreach (var (slot, tile, rotation) in tiles)
             state.Board[slot] = new PlacedTile(tile, rotation, 0);

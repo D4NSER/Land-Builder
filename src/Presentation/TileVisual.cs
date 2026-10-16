@@ -18,7 +18,7 @@ public sealed class TileVisual
     public int Slot { get; set; }
 
     // Physical response: vertical offset, squash and a little wobble.
-    public Spring Lift = new(0f, 230f, 15f);
+    public Spring Lift = new(0f, 230f, 19f);
     public Spring Squash = new(0f, 320f, 12f);
     public Spring WobbleX = new(0f, 160f, 7f);
     public Spring WobbleZ = new(0f, 160f, 7f);

@@ -14,7 +14,8 @@ public enum PlacementRejectionReason
     GameOver = 0,
     NoTileInHand = 1,
     SlotOccupied = 2,
-    NotConnected = 3
+    NotConnected = 3,
+    RiverBlocked = 4
 }
 
 /// <summary>Full breakdown of what a placement is worth. Also used for hover previews before committing.</summary>
@@ -65,6 +66,9 @@ public sealed record MilestoneReachedEvent(int Index, long Threshold, int TilesA
 public sealed record TilesAwardedEvent(int Amount, string Reason) : IDomainEvent;
 
 public sealed record HandAdvancedEvent(TileSpec? Current, TileSpec? Next, int StackCount) : IDomainEvent;
+
+/// <summary>The tile in hand fit nowhere (rivers cannot connect), so it was set aside and the next one drawn.</summary>
+public sealed record TileDiscardedEvent(TileSpec Tile) : IDomainEvent;
 
 public sealed record GameOverEvent(long FinalScore, RunStats Stats) : IDomainEvent;
 

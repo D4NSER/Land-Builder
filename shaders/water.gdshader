@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_always, cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
 
 #include "res://shaders/common.gdshaderinc"
 
@@ -15,6 +15,9 @@ uniform float wave_height = 0.0;
 uniform float ripple_scale = 3.0;
 uniform float ripple_strength = 0.35;
 uniform float far_fade = 0.0;
+uniform vec3 murk_color : source_color = vec3(0.36, 0.42, 0.24);
+
+varying float murk;
 
 varying vec3 world_pos;
 
@@ -43,6 +46,8 @@ vec2 ripple_gradient(vec2 p, float t) {
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	// Meshes without vertex colours read as white, i.e. perfectly clear water.
+	murk = 1.0 - COLOR.r;
 	if (wave_height > 0.0) {
 		VERTEX.y += waves(world_pos.xz, TIME) * wave_height;
 		world_pos.y += waves(world_pos.xz, TIME) * wave_height;
@@ -72,8 +77,10 @@ void fragment() {
 	vec3 n_world = normalize(vec3(-grad.x, 1.0, -grad.y));
 	NORMAL = normalize((VIEW_MATRIX * vec4(n_world, 0.0)).xyz);
 
+	col = mix(col, srgb_to_linear(murk_color), murk * 0.85);
+	foam *= 1.0 - murk * 0.75;
 	ALBEDO = mix(col, srgb_to_linear(foam_color), foam);
-	ALPHA = mix(clamp(min_alpha + d * (1.0 - min_alpha), 0.0, 1.0), 1.0, foam * 0.9);
+	ALPHA = mix(clamp(min_alpha + d * (1.0 - min_alpha) + murk * 0.3, 0.0, 1.0), 1.0, foam * 0.9);
 	ROUGHNESS = mix(0.12, 0.6, foam);
 	SPECULAR = 0.6;
 	METALLIC = 0.0;

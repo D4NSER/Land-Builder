@@ -53,8 +53,9 @@ public sealed class DeterminismAndPersistenceTests : IDisposable
     {
         var path = Path.Combine(_dir, "save.json");
         var repo = new SaveRepository();
-        var mid = PlayGreedy(GameState.CreateInitial(77), 25);
+        var mid = PlayGreedy(GameState.CreateInitial(77, WorldTheme.Nordic), 45);
 
+        Assert.True(mid.Unlocked.Count > Terrains.Starting.Count, "the run should have unlocked something to persist");
         repo.Save(path, mid);
         Assert.True(repo.TryLoad(path, out var loaded, out var error), error);
         Assert.Equal(mid.Fingerprint(), loaded.Fingerprint());

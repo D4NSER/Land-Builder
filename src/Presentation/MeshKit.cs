@@ -21,6 +21,9 @@ public sealed class MeshKit
     /// <summary>When set, triangles are flipped so they face away from this local-space point (convex shapes).</summary>
     public Vector3? OrientFrom;
 
+    /// <summary>When positive, positions are snapped to this grid so meshes built separately weld exactly.</summary>
+    public float SnapGrid;
+
     public int VertexCount => _positions.Count;
 
     /// <summary>
@@ -64,6 +67,8 @@ public sealed class MeshKit
 
     private void Add(Vector3 p, Vector3 n, Color color)
     {
+        if (SnapGrid > 0f)
+            p = (p / SnapGrid).Round() * SnapGrid;
         _positions.Add(p);
         _normals.Add(n);
         _colors.Add(new Color(color.R, color.G, color.B, Sway));

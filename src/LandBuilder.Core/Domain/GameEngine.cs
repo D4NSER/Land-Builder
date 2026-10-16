@@ -33,7 +33,9 @@ public static class GameEngine
 
             var mine = tile.EdgeTerrain(edge, rotation);
             var theirs = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
-            (mine == theirs ? matched : mismatched).Add(edge);
+            if (!Terrains.IsLegalContact(mine, theirs))
+                return Rejected(PlacementRejectionReason.RiverBlocked);
+            (Terrains.Matches(mine, theirs) ? matched : mismatched).Add(edge);
         }
 
         var neighbors = matched.Count + mismatched.Count;
@@ -154,7 +156,7 @@ public static class GameEngine
             var threshold = next.NextMilestoneScore;
             next.MilestonesReached++;
             tilesAwarded += GameRules.MilestoneTileReward;
-            var unlock = GameRules.MilestoneUnlock(index);
+            var unlock = GameRules.MilestoneUnlock(next.Theme, index);
             if (unlock is Terrain t && !next.Unlocked.Contains(t))
                 next.Unlocked.Add(t);
             else
@@ -166,6 +168,14 @@ public static class GameEngine
         next.Stats = stats;
         next.StackCount += tilesAwarded;
         AdvanceHand(next, ref rng, turn);
+
+        // Never strand the player: a tile whose rivers cannot connect anywhere is set aside.
+        while (next.CurrentTile is TileSpec stuck && !HasAnyValidPlacement(next))
+        {
+            events.Add(new TileDiscardedEvent(stuck));
+            AdvanceHand(next, ref rng, turn);
+        }
+
         next.RngState = rng.State;
         events.Add(new HandAdvancedEvent(next.CurrentTile, next.NextTile, next.StackCount));
 
@@ -262,6 +272,22 @@ public static class GameEngine
         return value;
     }
 
+    public static bool HasAnyValidPlacement(GameState state)
+    {
+        if (state.CurrentTile is null)
+            return false;
+        foreach (var slot in state.CandidateSlots())
+        {
+            for (var rotation = 0; rotation < 6; rotation++)
+            {
+                if (Evaluate(state, slot, rotation).IsValid)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     public static int NormalizeRotation(int rotation) => ((rotation % 6) + 6) % 6;
 
     public static string RejectionMessage(PlacementRejectionReason reason) => reason switch
@@ -270,6 +296,7 @@ public static class GameEngine
         PlacementRejectionReason.NoTileInHand => "No tile in hand.",
         PlacementRejectionReason.SlotOccupied => "That spot is already taken.",
         PlacementRejectionReason.NotConnected => "Tiles must touch your land.",
+        PlacementRejectionReason.RiverBlocked => "Rivers have to connect to a river or a lake.",
         _ => "Can't place there."
     };
 
@@ -319,7 +346,7 @@ public static class GameEngine
         var questTerrains = state.Quests.Select(q => q.Terrain).Distinct().ToArray();
 
         if (state.StackCount > 0 && state.NextTile is null)
-            state.NextTile = TileGenerator.Generate(ref rng, state.Unlocked, turn + 1, questTerrains);
+            state.NextTile = TileGenerator.Generate(ref rng, state.Unlocked, turn + 1, questTerrains, state.Theme);
 
         if (state.StackCount <= 0)
         {
@@ -332,7 +359,7 @@ public static class GameEngine
         state.CurrentTile = state.NextTile;
         state.StackCount -= 1;
         state.NextTile = state.StackCount > 0
-            ? TileGenerator.Generate(ref rng, state.Unlocked, turn + 2, questTerrains)
+            ? TileGenerator.Generate(ref rng, state.Unlocked, turn + 2, questTerrains, state.Theme)
             : null;
     }
 }

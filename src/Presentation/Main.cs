@@ -91,7 +91,12 @@ public partial class Main : Node3D
         _captureDir = args.FirstOrDefault(a => a.StartsWith("--capture-dir="))?.Split('=', 2)[1];
         _captureEvery = int.TryParse(args.FirstOrDefault(a => a.StartsWith("--capture-every="))?.Split('=', 2)[1], out var every) ? every : 90;
         _titleCapture = args.Contains("--title");
+        _zoomTerrain = args.FirstOrDefault(a => a.StartsWith("--zoom-terrain="))?.Split('=', 2)[1];
+        _zoomWaterFrame = int.TryParse(args.FirstOrDefault(a => a.StartsWith("--zoom-water-at="))?.Split('=', 2)[1], out var zw) ? zw : 0;
         _selfTest = args.Contains("--selftest");
+        var themeArg = args.FirstOrDefault(a => a.StartsWith("--theme="))?.Split('=', 2)[1];
+        if (Enum.TryParse<WorldTheme>(themeArg, true, out var forced))
+            _forcedTheme = forced;
         if (_selfTest || _autoplay)
         {
             // Never touch the player's real save or leaderboard from automated runs.
@@ -113,7 +118,18 @@ public partial class Main : Node3D
         _rig = new CameraRig { Name = "CameraRig" };
         AddChild(_rig);
 
-        var canvas = new CanvasLayer { Name = "UI" };
+        // Vignette sits between the world and the UI.
+        var vignetteLayer = new CanvasLayer { Name = "Vignette", Layer = 0 };
+        AddChild(vignetteLayer);
+        var vignette = new ColorRect
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/vignette.gdshader") }
+        };
+        vignette.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        vignetteLayer.AddChild(vignette);
+
+        var canvas = new CanvasLayer { Name = "UI", Layer = 1 };
         AddChild(canvas);
         var uiRoot = new Control { Theme = UiKit.BuildTheme(), MouseFilter = Control.MouseFilterEnum.Ignore };
         uiRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -146,7 +162,16 @@ public partial class Main : Node3D
 
         if (_selfTest)
             RunSelfTest();
+        if (args.Contains("--lab"))
+        {
+            _labArgs = args;
+            CallDeferred(nameof(StartLab));
+        }
     }
+
+    private string[] _labArgs = [];
+
+    private void StartLab() => RunLab(_labArgs);
 
     public override void _Input(InputEvent @event)
     {
@@ -155,10 +180,13 @@ public partial class Main : Node3D
     }
 
     private Vector2 _mousePos;
+    private WorldTheme? _forcedTheme;
 
     // Debug capture: periodic screenshots and FPS logging, used for automated visual checks.
     private string? _captureDir;
     private int _captureEvery;
+    private int _zoomWaterFrame;
+    private string? _zoomTerrain;
     private bool _titleCapture;
     private int _frame;
     private float _perfTimer;
@@ -171,6 +199,19 @@ public partial class Main : Node3D
         {
             _perfTimer = 0f;
             GD.Print($"[perf] fps={Engine.GetFramesPerSecond():0} tiles={_session?.State.Board.Count} draw={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)}");
+        }
+
+        if (_zoomWaterFrame > 0 && _frame == _zoomWaterFrame)
+        {
+            // Debug: freeze the bot and look closely at a lake.
+            _autoplay = false;
+            _mode = Mode.GameOver;
+            _hud.Visible = false;
+            _hand?.Free();
+            _hand = null;
+            var focusTerrain = Enum.TryParse<Terrain>(_zoomTerrain, true, out var ft) ? ft : Terrain.Water;
+            var wet = _session.State.Board.OrderByDescending(kv => kv.Value.Tile.ToArray().Count(t => t == focusTerrain)).First().Key;
+            _rig.Reframe(HexLayout.SlotToWorld(wet), 1.2f, instant: true);
         }
 
         if (_captureDir is null || _frame % _captureEvery != 0)
@@ -212,8 +253,10 @@ public partial class Main : Node3D
         _rig.SetAutoOrbit(0f);
         _rig.ScreenShift = 0f;
         _board.SetCandidatesVisible(_showCandidates);
-        BeginSession(GameSession.StartNew(seed, _sink), swoop: true);
+        BeginSession(new GameSession(GameState.CreateInitial(seed, _forcedTheme), _sink), swoop: true);
         _audio.Play(Sfx.Whoosh);
+        var theme = Themes.Info(_session.State.Theme);
+        After(0.9f, () => _hud.Banner(theme.DisplayName, theme.Tagline, Colors.White, 1.6f));
         _tutorialStage = _settings.TutorialDone || _autoplay || _selfTest ? 99 : 0;
         _tutorialMark = 0;
         UpdateTutorial();
@@ -252,6 +295,9 @@ public partial class Main : Node3D
         _handYaw = 0f;
         _board.Clear();
         _pendingFeedback.Clear();
+        var style = ThemeStyle.For(session.State.Theme);
+        _board.ApplyTheme(style);
+        _world.ApplyTheme(style);
         _shownScore = session.State.Score;
 
         // Cascade the island in from the centre outwards.
@@ -301,6 +347,7 @@ public partial class Main : Node3D
         _world.ApplyQuality(_settings.Shadows, _settings.AmbientOcclusion, _settings.Bloom);
         _rig.DepthOfField = _settings.DepthOfField;
         _fx.Intensity = _settings.Particles ? 1f : 0f;
+        _world.SetMotesEnabled(_settings.Particles);
         var wantFull = _settings.Fullscreen;
         var isFull = DisplayServer.WindowGetMode() is DisplayServer.WindowMode.Fullscreen or DisplayServer.WindowMode.ExclusiveFullscreen;
         if (wantFull != isFull)
@@ -369,6 +416,7 @@ public partial class Main : Node3D
             _world.DaylightTarget = _attract ? 0.3f : 0.15f + (0.85f * st.Turn / Mathf.Max(1f, st.Turn + st.TilesLeft + 6f));
         }
         _rig.AutoFocus = IslandCentre();
+        _world.SetViewDistance(_rig.Distance, _rig.FrameRadius);
     }
 
     // ================================================================== hand tile
@@ -613,7 +661,7 @@ public partial class Main : Node3D
         _fx.Burst(waterHeavy ? FxKind.Splash : FxKind.Dust, world + new Vector3(0, 0.05f, 0), 0.9f);
         if (tile.Tile.ToArray().Count(t => t == Terrain.Forest) >= 3)
             _fx.Burst(FxKind.Leaves, world + new Vector3(0, 0.25f, 0), 0.7f);
-        _board.Ripple(slot, 1.4f);
+        _board.Ripple(slot, 0.7f);
         if (_settings.ScreenShake && !_attract)
             _rig.Shake(0.12f);
 
@@ -783,6 +831,10 @@ public partial class Main : Node3D
                     break;
                 }
 
+                case TileDiscardedEvent when !quiet:
+                    After(delay + 0.4f, () => _hud.Toast("That river tile had nowhere to connect, so it was set aside.", 2.8f));
+                    break;
+
                 case MilestoneReachedEvent milestone when !quiet:
                 {
                     var d = delay + 0.9f;
@@ -794,6 +846,8 @@ public partial class Main : Node3D
                             ? $"{Terrains.DisplayName(t)} unlocked  ·  +{milestone.TilesAwarded} tiles"
                             : $"+{milestone.TilesAwarded} tiles";
                         _hud.Banner($"Milestone {milestone.Index + 1}!", subtitle, Palette.Gold, 1.5f);
+                        if (milestone.UnlockedTerrain == Terrain.River)
+                            After(2.2f, () => _hud.Toast("Rivers! River edges must connect to another river or a lake.", 4f));
                         _fx.Burst(FxKind.Confetti, IslandCentre() + new Vector3(0, 1.2f, 0), 1.6f);
                         _hud.FlyTiles(_hud.ScoreAnchor + new Vector2(0, 60), milestone.TilesAwarded, 0.2f);
                         if (_settings.ScreenShake)
@@ -871,12 +925,12 @@ public partial class Main : Node3D
         return score + 1;
     }
 
-    private static Terrain? NextUnlockFor(long score)
+    private Terrain? NextUnlockFor(long score)
     {
         for (var i = 0; i < 200; i++)
         {
             if (GameRules.MilestoneThreshold(i) > score)
-                return GameRules.MilestoneUnlock(i);
+                return GameRules.MilestoneUnlock(_session.State.Theme, i);
         }
 
         return null;
@@ -1051,6 +1105,7 @@ public partial class Main : Node3D
         var radius = IslandRadius();
         _rig.FrameRadius = radius;
         _world.SetShelf(IslandCentre(), radius);
+        _world.SetMotesArea(IslandCentre(), radius);
     }
 
     private void RefreshBest()

@@ -24,6 +24,7 @@ public sealed class SaveRepository
         {
             SchemaVersion = CurrentSchemaVersion,
             Seed = state.Seed,
+            Theme = state.Theme,
             RngState = state.RngState,
             Score = state.Score,
             Streak = state.Streak,
@@ -99,6 +100,7 @@ public sealed class SaveRepository
             state = new GameState
             {
                 Seed = payload.Seed,
+                Theme = payload.Theme ?? WorldTheme.Temperate,
                 RngState = payload.RngState,
                 Score = payload.Score,
                 Streak = payload.Streak,
@@ -153,6 +155,7 @@ public sealed class SaveRepository
     {
         public int SchemaVersion { get; set; }
         public ulong Seed { get; set; }
+        public WorldTheme? Theme { get; set; }
         public ulong RngState { get; set; }
         public long Score { get; set; }
         public int Streak { get; set; }

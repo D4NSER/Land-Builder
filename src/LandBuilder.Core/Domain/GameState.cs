@@ -35,6 +35,7 @@ public sealed record RunStats(
 public sealed class GameState
 {
     public ulong Seed { get; set; }
+    public WorldTheme Theme { get; set; }
     public ulong RngState { get; set; }
     public Dictionary<int, PlacedTile> Board { get; set; } = new();
     public TileSpec? CurrentTile { get; set; }
@@ -64,11 +65,12 @@ public sealed class GameState
 
     public long PreviousMilestoneScore => MilestonesReached == 0 ? 0 : GameRules.MilestoneThreshold(MilestonesReached - 1);
 
-    public static GameState CreateInitial(ulong seed)
+    public static GameState CreateInitial(ulong seed, WorldTheme? theme = null)
     {
         var state = new GameState
         {
             Seed = seed,
+            Theme = theme ?? Themes.FromSeed(seed),
             RngState = new Rng(seed).State,
             Unlocked = Terrains.Starting.ToList(),
             StackCount = GameRules.StartingStack,
@@ -80,8 +82,8 @@ public sealed class GameState
             new TileSpec(Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Forest, Terrain.Forest, Terrain.Grass), 0, 0);
 
         var rng = new Rng { State = state.RngState };
-        state.CurrentTile = TileGenerator.Generate(ref rng, state.Unlocked, 0);
-        state.NextTile = TileGenerator.Generate(ref rng, state.Unlocked, 1);
+        state.CurrentTile = TileGenerator.Generate(ref rng, state.Unlocked, 0, theme: state.Theme);
+        state.NextTile = TileGenerator.Generate(ref rng, state.Unlocked, 1, theme: state.Theme);
         state.RngState = rng.State;
         return state;
     }
@@ -89,6 +91,7 @@ public sealed class GameState
     public GameState Clone() => new()
     {
         Seed = Seed,
+        Theme = Theme,
         RngState = RngState,
         Board = new Dictionary<int, PlacedTile>(Board),
         CurrentTile = CurrentTile,
@@ -126,6 +129,6 @@ public sealed class GameState
     {
         var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}"));
         var quests = string.Join(";", Quests.Select(q => $"{q.Id}:{q.Terrain}:{q.Kind}:{q.Target}"));
-        return $"{Seed}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}";
+        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}";
     }
 }

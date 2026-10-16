@@ -18,18 +18,6 @@ public static class Palette
     public static readonly Color Sky = new("8fc9e8");
     public static readonly Color Gold = new("ffd25e");
 
-    public static Color TerrainBase(Terrain terrain) => terrain switch
-    {
-        Terrain.Grass => new Color("8fcf5a"),
-        Terrain.Forest => new Color("4f9a4c"),
-        Terrain.Field => new Color("e9c25a"),
-        Terrain.Village => new Color("b9c98a"),
-        Terrain.Water => new Color("6c9fa8"),
-        Terrain.Mountain => new Color("9a978f"),
-        Terrain.Sand => new Color("ecd49a"),
-        _ => Colors.Magenta
-    };
-
     /// <summary>Saturated swatch for icons, quest chips and edge markers.</summary>
     public static Color TerrainSwatch(Terrain terrain) => terrain switch
     {
@@ -40,6 +28,10 @@ public static class Palette
         Terrain.Water => new Color("3d9ad1"),
         Terrain.Mountain => new Color("7d7a86"),
         Terrain.Sand => new Color("e0b56a"),
+        Terrain.Snow => new Color("8fb3cf"),
+        Terrain.Swamp => new Color("5d7a45"),
+        Terrain.Orchard => new Color("e27a9a"),
+        Terrain.River => new Color("2f8fc4"),
         _ => Colors.Magenta
     };
 

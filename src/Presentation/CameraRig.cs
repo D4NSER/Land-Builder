@@ -56,7 +56,7 @@ public partial class CameraRig : Node3D
             DofBlurNearEnabled = true,
             DofBlurNearDistance = 3f,
             DofBlurNearTransition = 2f,
-            DofBlurAmount = 0.06f
+            DofBlurAmount = 0.035f
         };
         _camera = new Camera3D { Fov = 38f, Near = 0.05f, Far = 400f, Attributes = _attributes, Current = true };
         AddChild(_camera);
@@ -180,12 +180,14 @@ public partial class CameraRig : Node3D
         {
             _attributes.DofBlurFarEnabled = DepthOfField;
             _attributes.DofBlurNearEnabled = DepthOfField;
-            _attributes.DofBlurFarDistance = _distance + (FrameRadius * 0.9f) + 2.5f;
-            _attributes.DofBlurFarTransition = _distance * 1.2f;
-            _attributes.DofBlurNearDistance = Mathf.Max(1.5f, _distance * 0.45f);
-            _attributes.DofBlurNearTransition = _distance * 0.3f;
+            _attributes.DofBlurFarDistance = _distance + FrameRadius + 6f;
+            _attributes.DofBlurFarTransition = _distance * 1.5f;
+            _attributes.DofBlurNearDistance = Mathf.Max(1.5f, _distance * 0.35f);
+            _attributes.DofBlurNearTransition = _distance * 0.25f;
         }
     }
 
     public float Yaw => _yaw;
+
+    public float Distance => _distance;
 }

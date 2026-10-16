@@ -14,7 +14,10 @@ public partial class WorldView : Node3D
     private DirectionalLight3D _sun = null!;
     private MeshInstance3D _ocean = null!;
     private float _time;
-    private ProceduralSkyMaterial _sky = null!;
+    private ShaderMaterial _sky = null!;
+    private ShaderMaterial _oceanMaterial = null!;
+    private GpuParticles3D _motes = null!;
+    private ThemeStyle _style = ThemeStyle.For(LandBuilder.Domain.WorldTheme.Temperate);
     private float _daylight = 0.3f;
     private float _daylightTarget = 0.3f;
 
@@ -30,22 +33,12 @@ public partial class WorldView : Node3D
 
     public override void _Ready()
     {
-        var sky = new ProceduralSkyMaterial
-        {
-            SkyTopColor = new Color("5aa6dc"),
-            SkyHorizonColor = new Color("cfe8f2"),
-            SkyCurve = 0.12f,
-            GroundBottomColor = new Color("2a7fa6"),
-            GroundHorizonColor = new Color("cfe8f2"),
-            SunAngleMax = 20f,
-            SunCurve = 0.08f
-        };
-
+        var sky = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sky.gdshader") };
         _sky = sky;
         _environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
-            Sky = new Sky { SkyMaterial = sky },
+            Sky = new Sky { SkyMaterial = sky, ProcessMode = Sky.ProcessModeEnum.Incremental, RadianceSize = Sky.RadianceSizeEnum.Size128 },
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
             AmbientLightSkyContribution = 0.85f,
             AmbientLightEnergy = 0.8f,
@@ -60,19 +53,25 @@ public partial class WorldView : Node3D
             GlowHdrThreshold = 1.0f,
             GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Softlight,
             SsaoEnabled = true,
-            SsaoRadius = 0.7f,
-            SsaoIntensity = 1.6f,
+            SsaoRadius = 0.8f,
+            SsaoIntensity = 2.1f,
             SsaoPower = 1.3f,
             SsaoDetail = 0.6f,
             FogEnabled = true,
             FogLightColor = new Color("cfe8f2"),
-            FogDensity = 0.006f,
+            // Depth fog that only starts beyond the island: distant sea melts into the sky, the island stays crisp.
+            FogMode = Godot.Environment.FogModeEnum.Depth,
+            FogDensity = 1.0f,
+            FogDepthBegin = 30f,
+            FogDepthEnd = 140f,
+            FogDepthCurve = 1.3f,
             FogSkyAffect = 0.0f,
-            FogAerialPerspective = 0.25f,
+            FogAerialPerspective = 0.0f,
             AdjustmentEnabled = true,
             AdjustmentSaturation = 1.05f,
-            AdjustmentContrast = 1.04f,
-            AdjustmentBrightness = 1.0f
+            AdjustmentContrast = 1.06f,
+            AdjustmentBrightness = 1.0f,
+            AdjustmentColorCorrection = GradingLut()
         };
 
         AddChild(new WorldEnvironment { Environment = _environment });
@@ -83,7 +82,7 @@ public partial class WorldView : Node3D
             LightColor = new Color("fff1dc"),
             LightEnergy = 1.55f,
             ShadowEnabled = true,
-            ShadowBlur = 1.6f,
+            ShadowBlur = 1.1f,
             ShadowBias = 0.04f,
             ShadowNormalBias = 1.2f,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
@@ -108,15 +107,115 @@ public partial class WorldView : Node3D
         BuildOcean();
         BuildClouds();
         BuildBirds();
+        BuildMotes();
+    }
+
+    /// <summary>Gentle split-tone grade: slightly cool shadows, warm highlights.</summary>
+    private static GradientTexture1D GradingLut()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = [0f, 0.25f, 0.55f, 1f],
+            Colors = [new Color(0.0f, 0.01f, 0.04f), new Color(0.23f, 0.25f, 0.29f), new Color(0.57f, 0.56f, 0.53f), new Color(1f, 0.98f, 0.93f)]
+        };
+        return new GradientTexture1D { Gradient = gradient, Width = 256 };
+    }
+
+    /// <summary>Floating pollen by day, fireflies by golden hour.</summary>
+    private void BuildMotes()
+    {
+        var process = new ParticleProcessMaterial
+        {
+            EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box,
+            EmissionBoxExtents = new Vector3(4f, 0.4f, 4f),
+            Gravity = new Vector3(0, 0.02f, 0),
+            InitialVelocityMin = 0.02f,
+            InitialVelocityMax = 0.08f,
+            Spread = 180f,
+            TurbulenceEnabled = true,
+            TurbulenceNoiseStrength = 0.6f,
+            TurbulenceNoiseScale = 2.5f,
+            ScaleMin = 0.5f,
+            ScaleMax = 1.2f,
+            ColorRamp = new GradientTexture1D
+            {
+                Gradient = new Gradient
+                {
+                    Offsets = [0f, 0.2f, 0.8f, 1f],
+                    Colors = [new Color(1, 1, 1, 0), new Color(1, 1, 1, 1), new Color(1, 1, 1, 1), new Color(1, 1, 1, 0)]
+                }
+            }
+        };
+        var dot = new GradientTexture2D
+        {
+            Gradient = new Gradient { Offsets = [0f, 1f], Colors = [Colors.White, new Color(1, 1, 1, 0)] },
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(0.5f, 0f),
+            Width = 32,
+            Height = 32
+        };
+        var material = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
+            AlbedoTexture = dot,
+            VertexColorUseAsAlbedo = true,
+            AlbedoColor = new Color(1f, 0.95f, 0.75f, 0.5f)
+        };
+        _motes = new GpuParticles3D
+        {
+            Name = "Motes",
+            Amount = 70,
+            Lifetime = 9,
+            Preprocess = 9,
+            ProcessMaterial = process,
+            DrawPass1 = new QuadMesh { Size = new Vector2(0.025f, 0.025f), Material = material },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            VisibilityAabb = new Aabb(new Vector3(-30, -2, -30), new Vector3(60, 8, 60)),
+            Position = new Vector3(0, 0.35f, 0)
+        };
+        AddChild(_motes);
+    }
+
+    public void SetMotesArea(Vector3 centre, float radius)
+    {
+        if (_motes.ProcessMaterial is ParticleProcessMaterial process)
+            process.EmissionBoxExtents = new Vector3(radius, 0.4f, radius);
+        _motes.Position = new Vector3(centre.X, 0.4f, centre.Z);
+        _motes.Amount = Mathf.Clamp(Mathf.RoundToInt(radius * radius * 0.9f), 24, 110);
+    }
+
+    public void SetMotesEnabled(bool enabled) => _motes.Visible = enabled;
+
+    /// <summary>Keeps the fog band just beyond the island whatever the zoom.</summary>
+    public void SetViewDistance(float cameraDistance, float islandRadius)
+    {
+        _environment.FogDepthBegin = cameraDistance + islandRadius + 6f;
+        _environment.FogDepthEnd = cameraDistance + islandRadius + 110f;
+    }
+
+    /// <summary>Recolours sea, sky and light for a new island theme.</summary>
+    public void ApplyTheme(ThemeStyle style)
+    {
+        _style = style;
+        _oceanMaterial.SetShaderParameter("shallow_color", style.OceanShallow);
+        _oceanMaterial.SetShaderParameter("deep_color", style.OceanDeep);
+        if (GetNodeOrNull<MeshInstance3D>("Seabed") is { } seabed)
+            seabed.Mesh = BuildSeabed(style);
+        ApplyDaylight(_daylight);
     }
 
     private void BuildOcean()
     {
         var water = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/water.gdshader") };
+        _oceanMaterial = water;
         water.SetShaderParameter("shallow_color", new Color("4fc6c6"));
         water.SetShaderParameter("deep_color", new Color("1e6aa3"));
         water.SetShaderParameter("depth_scale", 2.0f);
-        water.SetShaderParameter("foam_width", 0.14f);
+        water.SetShaderParameter("foam_width", 0.17f);
         water.SetShaderParameter("min_alpha", 0.62f);
         water.SetShaderParameter("wave_height", 0.018f);
         water.SetShaderParameter("ripple_scale", 1.4f);
@@ -136,7 +235,7 @@ public partial class WorldView : Node3D
         AddChild(new MeshInstance3D
         {
             Name = "Seabed",
-            Mesh = BuildSeabed(),
+            Mesh = BuildSeabed(_style),
             MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 1f },
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
         });
@@ -146,7 +245,7 @@ public partial class WorldView : Node3D
     /// Radial seabed in unit space: a sandy shelf right under the island that slopes away into the deep.
     /// The node is scaled with the island so the turquoise shallows always hug the coast.
     /// </summary>
-    private static ArrayMesh BuildSeabed()
+    private static ArrayMesh BuildSeabed(ThemeStyle style)
     {
         var kit = new MeshKit();
         const int segments = 72;
@@ -155,8 +254,8 @@ public partial class WorldView : Node3D
         float Height(float r) => Mathf.Lerp(-2.6f, -5f, Mathf.SmoothStep(0.6f, 2.5f, r));
         Color ColorAt(float r)
         {
-            var teal = new Color("3a8ea6");
-            var deep = new Color("1d4f7a");
+            var teal = style.ShelfTeal.Darkened(0.05f);
+            var deep = style.OceanDeep.Darkened(0.25f);
             return teal.Lerp(deep, Mathf.SmoothStep(0.4f, 2.0f, r));
         }
 
@@ -301,21 +400,36 @@ public partial class WorldView : Node3D
 
     private void ApplyDaylight(float t)
     {
-        // Keyframes: morning, midday, golden hour.
+        // Keyframes: morning, midday, golden hour. The theme provides the midday palette.
         static float Key3(float t, float a, float b, float c) => t < 0.4f ? Mathf.Lerp(a, b, t / 0.4f) : Mathf.Lerp(b, c, (t - 0.4f) / 0.6f);
         static Color Col3(float t, Color a, Color b, Color c) => t < 0.4f ? a.Lerp(b, t / 0.4f) : b.Lerp(c, (t - 0.4f) / 0.6f);
+
+        var top = _style.SkyTop;
+        var horizon = _style.SkyHorizon;
+        var sun = _style.SunColor;
+        var golden = new Color("ffd49c");
 
         _sun.Rotation = new Vector3(
             Mathf.DegToRad(Key3(t, -34f, -56f, -22f)),
             Mathf.DegToRad(Key3(t, 70f, 38f, -12f)),
             0f);
-        _sun.LightColor = Col3(t, new Color("fff4e2"), new Color("fff1dc"), new Color("ffd49c"));
-        _sun.LightEnergy = Key3(t, 1.4f, 1.55f, 1.45f);
-        _sky.SkyTopColor = Col3(t, new Color("63a9dc"), new Color("5aa6dc"), new Color("5b9ad3"));
-        _sky.SkyHorizonColor = Col3(t, new Color("d6ecf2"), new Color("cfe8f2"), new Color("f2e0c6"));
-        _sky.GroundHorizonColor = _sky.SkyHorizonColor;
-        _environment.FogLightColor = _sky.SkyHorizonColor;
+        _sun.LightColor = Col3(t, sun.Lerp(Colors.White, 0.3f), sun, sun.Lerp(golden, 0.85f));
+        _sun.LightEnergy = Key3(t, 1.45f, 1.6f, 1.5f);
+
+        var skyTop = Col3(t, top.Lightened(0.05f), top, top.Lerp(new Color("5b8fd0"), 0.4f));
+        var skyHorizon = Col3(t, horizon.Lightened(0.05f), horizon, horizon.Lerp(new Color("f6d9b4"), 0.6f));
+        _sky.SetShaderParameter("top_color", skyTop);
+        _sky.SetShaderParameter("horizon_color", skyHorizon);
+        _sky.SetShaderParameter("ground_color", _style.OceanDeep);
+        _sky.SetShaderParameter("sun_tint", _sun.LightColor);
+        _sky.SetShaderParameter("cloud_color", Col3(t, Colors.White, Colors.White, new Color("fff0dc")));
+        _sky.SetShaderParameter("cloud_shade", Col3(t, new Color("cbd8e8"), new Color("c7d5e6"), new Color("e8c3b4")));
+        _environment.FogLightColor = skyHorizon;
         _environment.AmbientLightEnergy = Key3(t, 0.85f, 0.8f, 0.78f);
+
+        // Motes become fireflies as the day ends.
+        if (_motes?.DrawPass1 is QuadMesh { Material: StandardMaterial3D motes })
+            motes.AlbedoColor = Col3(t, new Color(1f, 1f, 0.95f, 0.18f), new Color(1f, 0.97f, 0.85f, 0.18f), new Color(1f, 0.85f, 0.45f, 0.75f));
     }
 
     public void ApplyQuality(bool shadows, bool ssao, bool glow)

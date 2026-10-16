@@ -12,7 +12,7 @@ public sealed record Region(int Id, Terrain Terrain, IReadOnlyList<SectorRef> Se
 /// <summary>
 /// Connected areas of identical terrain across the board. Adjacent wedges inside a tile join when they share a terrain,
 /// and wedges on either side of a shared edge join when their terrains match. A region is closed once none of its
-/// wedges border an empty slot, which means it can never grow again.
+/// wedges border an empty slot, which means it can never grow again. All river wedges of one tile form one channel.
 /// </summary>
 public sealed class RegionMap
 {
@@ -67,6 +67,18 @@ public sealed class RegionMap
 
         foreach (var (slot, tile) in board)
         {
+            // A river network inside one tile is a single channel even when its edges are not adjacent.
+            var firstRiver = -1;
+            for (var e = 0; e < 6; e++)
+            {
+                if (tile.EdgeTerrain(e) != Terrain.River)
+                    continue;
+                if (firstRiver < 0)
+                    firstRiver = e;
+                else
+                    Union(new SectorRef(slot, firstRiver), new SectorRef(slot, e));
+            }
+
             for (var e = 0; e < 6; e++)
             {
                 var terrain = tile.EdgeTerrain(e);

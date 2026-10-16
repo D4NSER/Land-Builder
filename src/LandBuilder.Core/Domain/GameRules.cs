@@ -39,11 +39,6 @@ public static class GameRules
         return threshold;
     }
 
-    /// <summary>Terrain unlocked by reaching milestone <paramref name="index"/>, if any.</summary>
-    public static Terrain? MilestoneUnlock(int index) => index switch
-    {
-        0 => Terrain.Mountain,
-        2 => Terrain.Sand,
-        _ => null
-    };
+    /// <summary>Terrain unlocked by reaching milestone <paramref name="index"/> on an island of the given theme, if any.</summary>
+    public static Terrain? MilestoneUnlock(WorldTheme theme, int index) => Themes.Unlock(theme, index);
 }

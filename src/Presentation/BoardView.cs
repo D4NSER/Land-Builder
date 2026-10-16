@@ -33,6 +33,9 @@ public partial class BoardView : Node3D
 
     public Fx Fx { get; set; } = null!;
 
+    /// <summary>Look of the current island; set before tiles are created.</summary>
+    public ThemeStyle Style { get; private set; } = ThemeStyle.For(WorldTheme.Temperate);
+
     public event Action<int, TileVisual>? TileLanded;
 
     public IReadOnlyDictionary<int, TileVisual> Tiles => _tiles;
@@ -44,7 +47,7 @@ public partial class BoardView : Node3D
         _lakeMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/water.gdshader") };
         _lakeMaterial.SetShaderParameter("shallow_color", new Color("86d6cc"));
         _lakeMaterial.SetShaderParameter("deep_color", new Color("3a88b4"));
-        _lakeMaterial.SetShaderParameter("depth_scale", 0.2f);
+        _lakeMaterial.SetShaderParameter("depth_scale", 0.3f);
         _lakeMaterial.SetShaderParameter("foam_width", 0.02f);
         _lakeMaterial.SetShaderParameter("min_alpha", 0.6f);
         _lakeMaterial.SetShaderParameter("ripple_scale", 6.0f);
@@ -57,7 +60,7 @@ public partial class BoardView : Node3D
 
         _outlineMesh = BuildOutlineMesh(0.86f, 0.028f);
         _edgeMarkerMesh = BuildEdgeMarkerMesh();
-        _shelfMesh = BuildShelfMesh();
+        _shelfMesh = BuildShelfMesh(Style);
         _shelfMaterial = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 1f };
         _candidateRoot = new Node3D { Name = "Candidates" };
         _markerRoot = new Node3D { Name = "EdgeMarkers" };
@@ -85,24 +88,24 @@ public partial class BoardView : Node3D
     // ------------------------------------------------------------------ building
 
     /// <summary>Builds tile nodes. <paramref name="worldCenter"/> anchors noise so the tile blends with its neighbours.</summary>
-    public TileVisual CreateTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed)
+    public TileVisual CreateTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater = false)
     {
         var root = new Node3D { Name = "Tile" };
         var body = new Node3D { Name = "Body", Rotation = new Vector3(0, HexLayout.RotationToYaw(rotation), 0) };
         root.AddChild(body);
 
         var toWorld = new Transform3D(new Basis(Vector3.Up, HexLayout.RotationToYaw(rotation)), worldCenter);
-        var sampler = new TerrainSampler(tile, toWorld);
+        var sampler = new TerrainSampler(tile, toWorld, Style);
+        var (groundMesh, waterMesh) = TileMeshBuilder.Build(sampler, worldWater ? toWorld : null);
         var ground = new MeshInstance3D
         {
             Name = "Ground",
-            Mesh = TileMeshBuilder.BuildGround(sampler),
+            Mesh = groundMesh,
             MaterialOverride = _terrainMaterial
         };
         body.AddChild(ground);
 
         MeshInstance3D? water = null;
-        var waterMesh = TileMeshBuilder.BuildWater(sampler, tile);
         if (waterMesh is not null)
         {
             water = new MeshInstance3D
@@ -110,7 +113,10 @@ public partial class BoardView : Node3D
                 Name = "Water",
                 Mesh = waterMesh,
                 MaterialOverride = _lakeMaterial,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // World-space water stays put; it appears once the tile has landed.
+                TopLevel = worldWater,
+                Visible = !worldWater
             };
             body.AddChild(water);
         }
@@ -148,13 +154,22 @@ public partial class BoardView : Node3D
         };
     }
 
+    /// <summary>Switches palettes for a new island: lakes, sandbanks and every tile built from now on.</summary>
+    public void ApplyTheme(ThemeStyle style)
+    {
+        Style = style;
+        _lakeMaterial.SetShaderParameter("shallow_color", style.LakeShallow);
+        _lakeMaterial.SetShaderParameter("deep_color", style.LakeDeep);
+        _shelfMesh = BuildShelfMesh(style);
+    }
+
     public static int SeedFor(int slot, int turn) => unchecked((slot * 73856093) ^ (turn * 19349663) ^ 0x5bd1e995);
 
     /// <summary>Adds a tile instantly (loading a save, starter tile) with an optional gentle pop.</summary>
     public TileVisual AddTileImmediate(int slot, PlacedTile placed, bool pop, float delay = 0f)
     {
         RemoveTile(slot);
-        var visual = CreateTileVisual(placed.Tile, placed.Rotation, HexLayout.SlotToWorld(slot), SeedFor(slot, placed.Turn));
+        var visual = CreateTileVisual(placed.Tile, placed.Rotation, HexLayout.SlotToWorld(slot), SeedFor(slot, placed.Turn), worldWater: true);
         visual.Slot = slot;
         visual.Root.Position = HexLayout.SlotToWorld(slot);
         AddChild(visual.Root);
@@ -182,6 +197,11 @@ public partial class BoardView : Node3D
         else
         {
             visual.SetGrow(1f);
+            if (visual.Water is not null)
+            {
+                visual.Water.Visible = true;
+                visual.Water.GlobalTransform = Transform3D.Identity;
+            }
         }
 
         return visual;
@@ -295,7 +315,7 @@ public partial class BoardView : Node3D
             if (slot == originSlot)
                 continue;
             var distance = HexGrid.Decode(slot).DistanceTo(origin);
-            if (distance > 3)
+            if (distance > 2)
                 continue;
             tile.PendingImpulse = -strength / (distance * distance);
             tile.PendingImpulseDelay = (distance - 1) * 0.055f;
@@ -352,6 +372,7 @@ public partial class BoardView : Node3D
             if (!tile.Landed && tile.Lift.Value <= 0.02f && wasAbove)
             {
                 tile.Landed = true;
+                ShowWater(tile);
                 tile.GrowSpeed = 1.15f;
                 tile.Squash.Velocity -= Mathf.Clamp(-tile.Lift.Velocity, 0f, 12f) * 0.9f;
                 TileLanded?.Invoke(slot, tile);
@@ -359,6 +380,7 @@ public partial class BoardView : Node3D
             else if (!tile.Landed && tile.Lift.Target == 0f && tile.Lift.IsSettled(0.01f))
             {
                 tile.Landed = true;
+                ShowWater(tile);
                 tile.GrowSpeed = 1.15f;
             }
 
@@ -395,6 +417,14 @@ public partial class BoardView : Node3D
             var matched = marker.HasMeta("matched") && marker.GetMeta("matched").AsBool();
             marker.Scale = matched ? Vector3.One * (0.95f + (pulse * 0.1f)) : new Vector3(1f, 1f, 1f) * (0.9f + (Mathf.Abs(Mathf.Sin(_time * 12f)) * 0.15f));
         }
+    }
+
+    private static void ShowWater(TileVisual tile)
+    {
+        if (tile.Water is not { TopLevel: true } water)
+            return;
+        water.GlobalTransform = Transform3D.Identity;
+        water.Visible = true;
     }
 
     private void AnimateParts(TileVisual tile)
@@ -437,14 +467,14 @@ public partial class BoardView : Node3D
         return kit.Commit(withCustom: false);
     }
 
-    private static ArrayMesh BuildShelfMesh()
+    private static ArrayMesh BuildShelfMesh(ThemeStyle style)
     {
         var kit = new MeshKit();
         var up = Vector3.Up;
         const int segments = 24;
         float[] radii = [0f, 1.05f, 1.6f, 2.3f];
         float[] heights = [-0.82f, -0.86f, -1.35f, -2.6f];
-        Color[] colors = [new("c9dcae"), new("c9dcae"), new("8fc6b0"), new("3f8fa6")];
+        Color[] colors = [style.ShelfSand, style.ShelfSand, style.ShelfSand.Lerp(style.ShelfTeal, 0.5f), style.ShelfTeal];
         for (var ring = 0; ring < radii.Length - 1; ring++)
         {
             for (var i = 0; i < segments; i++)

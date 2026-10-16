@@ -18,7 +18,11 @@ public enum IconKind
     House,
     Waves,
     Dune,
-    Flower
+    Flower,
+    Snowflake,
+    Reeds,
+    Blossom,
+    River
 }
 
 /// <summary>Small vector icons drawn with canvas primitives, so they look crisp at any scale and need no font glyphs.</summary>
@@ -44,6 +48,10 @@ public partial class Icon : Control
         Terrain.Water => IconKind.Waves,
         Terrain.Mountain => IconKind.Mountain,
         Terrain.Sand => IconKind.Dune,
+        Terrain.Snow => IconKind.Snowflake,
+        Terrain.Swamp => IconKind.Reeds,
+        Terrain.Orchard => IconKind.Blossom,
+        Terrain.River => IconKind.River,
         _ => IconKind.Hex
     };
 
@@ -148,6 +156,43 @@ public partial class Icon : Control
                 DrawColoredPolygon(Arc(P(0.72f, 0.98f), s * 0.3f, 0.6f, s), new Color(c, 0.75f));
                 DrawCircle(P(0.78f, 0.22f), s * 0.1f, new Color(c, 0.9f));
                 break;
+            case IconKind.Snowflake:
+                for (var i = 0; i < 3; i++)
+                {
+                    var a = i * Mathf.Pi / 3f;
+                    var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.4f;
+                    DrawLine(P(0.5f - d.X, 0.5f - d.Y), P(0.5f + d.X, 0.5f + d.Y), c, w, true);
+                }
+
+                DrawCircle(P(0.5f, 0.5f), s * 0.08f, c);
+                break;
+            case IconKind.Reeds:
+                DrawLine(P(0.3f, 0.9f), P(0.25f, 0.2f), c, w, true);
+                DrawLine(P(0.5f, 0.9f), P(0.52f, 0.12f), c, w, true);
+                DrawLine(P(0.7f, 0.9f), P(0.78f, 0.28f), c, w, true);
+                DrawRect(new Rect2(P(0.47f, 0.2f), new Vector2(s * 0.1f, s * 0.22f)), c);
+                break;
+            case IconKind.Blossom:
+                for (var i = 0; i < 5; i++)
+                {
+                    var a = (i * Mathf.Tau / 5f) - (Mathf.Pi / 2f);
+                    DrawCircle(P(0.5f + (Mathf.Cos(a) * 0.22f), 0.5f + (Mathf.Sin(a) * 0.22f)), s * 0.16f, c);
+                }
+
+                DrawCircle(P(0.5f, 0.5f), s * 0.1f, new Color(1f, 0.85f, 0.4f));
+                break;
+            case IconKind.River:
+            {
+                var pts = new Vector2[17];
+                for (var i = 0; i <= 16; i++)
+                {
+                    var t = i / 16f;
+                    pts[i] = P(0.5f + (Mathf.Sin(t * Mathf.Tau) * 0.22f), 0.08f + (t * 0.84f));
+                }
+
+                DrawPolyline(pts, c, w * 2.2f, true);
+                break;
+            }
             case IconKind.Flower:
                 for (var i = 0; i < 5; i++)
                 {
