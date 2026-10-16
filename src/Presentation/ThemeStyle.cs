@@ -70,6 +70,20 @@ public sealed class ThemeStyle
     public bool RicePaddies { get; init; }
     public bool Rainforest { get; init; }
 
+    public bool ConiferHeavy()
+    {
+        var conifers = 0f;
+        var total = 0f;
+        foreach (var (species, weight) in ForestTrees)
+        {
+            total += weight;
+            if (species is TreeSpecies.Pine or TreeSpecies.Fir)
+                conifers += weight;
+        }
+
+        return conifers > total * 0.5f;
+    }
+
     public Color GroundA(Terrain t) => Ground[t].A;
     public Color GroundB(Terrain t) => Ground[t].B;
 
@@ -123,7 +137,7 @@ public sealed class ThemeStyle
             SkyHorizon = new("cfe8f2"),
             SunColor = new("fff1dc"),
             SnowLine = 0.62f,
-            Seasons = new SeasonProfile(Snow: 0.8f, Autumn: 1f, Spring: 1f, Dry: 0f)
+            Seasons = new SeasonProfile(Snow: 0.7f, Autumn: 1f, Spring: 1f, Dry: 0f)
         },
         [WorldTheme.Nordic] = new ThemeStyle
         {

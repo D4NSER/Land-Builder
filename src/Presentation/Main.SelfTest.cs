@@ -128,6 +128,34 @@ public partial class Main
         await Wait(3.5f);
         Check(_shownScore == _session.State.Score, $"HUD score catches up with the real score ({_shownScore} vs {_session.State.Score})");
 
+        // --- wonder card: pick up with G, cancel with Esc, pick up again and place by clicking
+        _session.State.WonderCards.Add(WonderType.Cathedral);
+        RefreshHud();
+        PressKey(Godot.Key.G);
+        await Wait(0.3f);
+        Check(_wonderCard == 0 && _hand?.Wonder == WonderType.Cathedral, "G picks up the wonder card");
+        PressKey(Godot.Key.Escape);
+        await Wait(0.3f);
+        Check(_wonderCard == -1 && _mode == Mode.Playing, "Esc puts the wonder card back without pausing");
+        PressKey(Godot.Key.G);
+        await Wait(0.3f);
+        var wonderPlan = GameEngine.FindBestWonderPlacement(_session.State, 0)!;
+        for (var guard = 0; guard < 6 && _rotation != wonderPlan.Rotation; guard++)
+        {
+            PressKey(Godot.Key.Q);
+            await Wait(0.05f);
+        }
+
+        var wonderSpot = SlotScreen(wonderPlan.Slot);
+        Motion(wonderSpot);
+        await Wait(0.2f);
+        Click(wonderSpot, MouseButton.Left);
+        await Wait(1.0f);
+        Check(_session.State.Board.TryGetValue(wonderPlan.Slot, out var site) && site.Wonder == WonderType.Cathedral, "clicking places the wonder site");
+        Check(_session.State.WonderCards.Count == 0 && _wonderCard == -1, "placing uses up the card");
+        Check(_board.Tiles.TryGetValue(wonderPlan.Slot, out var siteVisual) && siteVisual.WonderModel is not null, "the site shows a construction model");
+        Snap("wonder_site");
+
         // --- save, back to title, continue
         var snapshot = _session.State.Fingerprint();
         GoToTitle();

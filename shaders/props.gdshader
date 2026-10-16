@@ -30,6 +30,17 @@ void vertex() {
 	float t = clamp((grow - delay * 0.6) / 0.4, 0.0, 1.0);
 	float s = max(ease_out_back(t), 0.0);
 	vec3 local = (VERTEX - pivot) * s;
+	// Buildings are constructed rather than popped: walls rise from the ground, then roofs drop on.
+	float cls = COLOR.a;
+	if (cls > 0.015 && cls < 0.045) {
+		float rise = smoothstep(0.0, 1.0, t);
+		local = VERTEX - pivot;
+		local.y *= rise;
+		local.xz *= mix(0.92, 1.0, rise);
+	} else if (cls >= 0.045 && cls < 0.09) {
+		float drop = smoothstep(0.55, 1.0, t);
+		local = (VERTEX - pivot) * mix(0.8, 1.0, drop) + vec3(0.0, (1.0 - drop) * 0.3, 0.0);
+	}
 
 	float sway = COLOR.a;
 	vec3 wp = (MODEL_MATRIX * vec4(pivot, 1.0)).xyz;

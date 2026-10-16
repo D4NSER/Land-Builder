@@ -142,7 +142,9 @@ public partial class Main : Node3D
         uiRoot.AddChild(_menus);
 
         _board.TileLanded += OnTileLanded;
+        _board.ContextProvider = ContextFor;
         _hud.UndoPressed += Undo;
+        _hud.WonderCardPressed += ToggleWonder;
         _hud.HintPressed += ShowHint;
         _hud.PausePressed += Pause;
         _menus.ContinuePressed += ContinueGame;
@@ -182,6 +184,7 @@ public partial class Main : Node3D
     }
 
     private Vector2 _mousePos;
+    private int _wonderCard = -1;
     private SeasonDirector _seasons = null!;
     private ThemeStyle _style = ThemeStyle.For(WorldTheme.Temperate);
     private WorldTheme? _forcedTheme;
@@ -433,15 +436,15 @@ public partial class Main : Node3D
 
     // ================================================================== hand tile
 
-    private void SetHand(TileSpec? tile, bool immediate)
+    private void SetHand(TileSpec? tile, bool immediate, WonderType? wonder = null)
     {
         _hand?.Free();
         _hand = null;
         _handTile = tile;
-        if (tile is null)
+        if (tile is null && wonder is null)
             return;
 
-        _hand = _board.CreateDetachedVisual(tile.Value);
+        _hand = wonder is WonderType w ? _board.CreateDetachedWonderVisual(w) : _board.CreateDetachedVisual(tile!.Value);
         _hand.SetGrow(1f);
         _handRoot.AddChild(_hand.Root);
         _rotation = 0;
@@ -512,9 +515,15 @@ public partial class Main : Node3D
 
     private void RefreshHoverEval()
     {
-        _hoverEval = _hoverSlot is int s && _session.State.CurrentTile is not null
-            ? GameEngine.Evaluate(_session.State, s, _rotation)
-            : null;
+        if (_hoverSlot is not int s)
+        {
+            _hoverEval = null;
+            return;
+        }
+
+        _hoverEval = _wonderCard >= 0
+            ? GameEngine.EvaluateWonder(_session.State, _wonderCard, s, _rotation)
+            : _session.State.CurrentTile is not null ? GameEngine.Evaluate(_session.State, s, _rotation) : null;
     }
 
     private void UpdateHand(float dt)
@@ -571,6 +580,8 @@ public partial class Main : Node3D
             _board.ShowEdgeMarkers(_hand.Root.Position + new Vector3(0, 0.12f, 0), eval);
             var screen = _rig.Camera.UnprojectPosition(_hand.Root.Position + new Vector3(0, 0.45f, 0));
             var (text, color) = DescribeEval(eval);
+            if (_wonderCard >= 0 && eval.IsValid)
+                (text, color) = ($"Build site here  ·  +{eval.TotalPoints}", Palette.Gold);
             _hud.SetHoverInfo(_mode == Mode.Playing && !_attract ? screen : null, text, color);
         }
         else
@@ -615,9 +626,42 @@ public partial class Main : Node3D
         Place(slot, _rotation);
     }
 
+    /// <summary>Picks up (or puts back) a wonder card; while held, the floating tile is the wonder's site.</summary>
+    private void ToggleWonder(int index)
+    {
+        if (_mode != Mode.Playing || _attract || _session.State.IsGameOver)
+            return;
+        if (index < 0 || index >= _session.State.WonderCards.Count)
+        {
+            _hud.Toast("No wonder card yet. Wonders come with every second milestone and every third quest.", 2.6f);
+            return;
+        }
+
+        if (_wonderCard == index)
+        {
+            _wonderCard = -1;
+            SetHand(_session.State.CurrentTile, immediate: false);
+        }
+        else
+        {
+            _wonderCard = index;
+            SetHand(null, immediate: false, _session.State.WonderCards[index]);
+            var def = Wonders.Info(_session.State.WonderCards[index]);
+            _hud.Toast($"Place the {def.Name}: it completes once its neighbours give it {Recipe(def)}.", 3.5f);
+        }
+
+        _audio.Play(Sfx.Whoosh, 1.2f, -4f);
+        RefreshHoverEval();
+        RefreshHud();
+    }
+
+    private static string Recipe(WonderDef def) =>
+        string.Join(" and ", def.Recipe.Select(r => $"{r.Value} {Terrains.DisplayName(r.Key).ToLowerInvariant()} edges"));
+
     private void Place(int slot, int rotation)
     {
-        var eval = GameEngine.Evaluate(_session.State, slot, rotation);
+        var wonderCard = _wonderCard;
+        var eval = wonderCard >= 0 ? GameEngine.EvaluateWonder(_session.State, wonderCard, slot, rotation) : GameEngine.Evaluate(_session.State, slot, rotation);
         if (!eval.IsValid)
         {
             _audio.Play(Sfx.Invalid);
@@ -629,7 +673,8 @@ public partial class Main : Node3D
         var before = _session.State;
         var handPosition = _hand?.Root.Position ?? HexLayout.SlotToWorld(slot) + new Vector3(0, HoverHeight, 0);
         var tilt = _hand?.Root.Rotation ?? Vector3.Zero;
-        var events = _session.Place(slot, rotation);
+        var events = wonderCard >= 0 ? _session.PlaceWonder(wonderCard, slot, rotation) : _session.Place(slot, rotation);
+        _wonderCard = -1;
         _sink.Clear();
         var after = _session.State;
         _idleHintTimer = 0f;
@@ -648,6 +693,7 @@ public partial class Main : Node3D
         SetHand(after.CurrentTile, immediate: false);
         RefreshCandidates();
         RefreshHud();
+        _board.RefreshContexts();
 
         if (!_attract)
             AutoSave();
@@ -847,6 +893,66 @@ public partial class Main : Node3D
                     After(1.5f, () => ApplySeason(instant: false));
                     break;
 
+                case WonderAwardedEvent awarded when !quiet:
+                {
+                    var d = delay + 1.4f;
+                    delay += 1.2f;
+                    After(d, () =>
+                    {
+                        var def = Wonders.Info(awarded.Type);
+                        _audio.Play(Sfx.Flawless, 0.9f);
+                        _hud.Banner($"Wonder: {def.Name}!", "Click the card (or press G) to place it", Palette.Gold, 1.8f);
+                        _fx.Burst(FxKind.Sparkle, IslandCentre() + new Vector3(0, 1f, 0), 1.6f);
+                    });
+                    break;
+                }
+
+                case WonderPlacedEvent placedWonder when !quiet:
+                {
+                    var def = Wonders.Info(placedWonder.Type);
+                    After(0.4f, () =>
+                    {
+                        _audio.Play(Sfx.QuestNew, 0.9f);
+                        _hud.Toast($"{def.Name} site ready. Surround it with {Recipe(def)} to build it.", 3.5f);
+                    });
+                    break;
+                }
+
+                case WonderCompletedEvent done:
+                {
+                    running += done.Points;
+                    var target = running;
+                    var wonderWorld = HexLayout.SlotToWorld(done.Slot) + new Vector3(0, 0.6f, 0);
+                    var d = delay + 0.6f;
+                    delay += 1.4f;
+                    After(d, () =>
+                    {
+                        _board.CompleteWonder(done.Slot);
+                        if (quiet)
+                        {
+                            _scoreQueue.Add((target, _time));
+                            return;
+                        }
+
+                        var def = Wonders.Info(done.Type);
+                        _audio.Play(Sfx.Milestone);
+                        _hud.Banner($"{def.Name} built!", $"+{done.Points} points  ·  +{done.Tiles} tiles", Palette.Gold, 2f);
+                        for (var i = 0; i < 4; i++)
+                        {
+                            var burst = wonderWorld + new Vector3((float)GD.RandRange(-0.6, 0.6), (float)GD.RandRange(0.3, 1.2), (float)GD.RandRange(-0.6, 0.6));
+                            var kind = i % 2 == 0 ? FxKind.Confetti : FxKind.Sparkle;
+                            After(i * 0.35f, () => _fx.Burst(kind, burst, 1.3f));
+                        }
+
+                        var screenPos = _rig.Camera.UnprojectPosition(wonderWorld);
+                        _hud.FlyPoints(screenPos, $"+{done.Points}", Palette.AccentDeep, 0.6f, () => _scoreQueue.Add((target, _time)));
+                        _hud.FlyTiles(screenPos, done.Tiles, 0.8f);
+                        if (_settings.ScreenShake)
+                            _rig.Shake(0.45f);
+                    });
+                    break;
+                }
+
                 case TileDiscardedEvent when !quiet:
                     After(delay + 0.4f, () => _hud.Toast("That river tile had nowhere to connect, so it was set aside.", 2.8f));
                     break;
@@ -876,6 +982,56 @@ public partial class Main : Node3D
         }
 
         _scoreQueue.Add((feedback.After.Score, _time + 3.0));
+    }
+
+    private GameState? _contextState;
+    private RegionMap? _contextRegions;
+
+    /// <summary>
+    /// How a tile relates to its neighbours: village size tier, roads into neighbouring villages, mountain ridges that
+    /// continue across a border, and forest depth. Edges are converted to the tile's local frame.
+    /// </summary>
+    private TileContext ContextFor(int slot, int rotation)
+    {
+        var state = _session.State;
+        if (!ReferenceEquals(_contextState, state))
+        {
+            _contextState = state;
+            _contextRegions = RegionMap.Build(state.Board);
+        }
+
+        if (!state.Board.TryGetValue(slot, out var tile) || _contextRegions is null)
+            return TileContext.Empty;
+
+        var villageSize = 0;
+        var forestSize = 0;
+        var roads = new List<int>();
+        var ridges = new List<int>();
+        for (var edge = 0; edge < 6; edge++)
+        {
+            var terrain = tile.EdgeTerrain(edge);
+            var region = _contextRegions.RegionAt(new SectorRef(slot, edge));
+            if (terrain == Terrain.Village)
+                villageSize = Math.Max(villageSize, region?.Size ?? 0);
+            if (terrain == Terrain.Forest)
+                forestSize = Math.Max(forestSize, region?.Size ?? 0);
+
+            var neighborSlot = HexGrid.NeighborSlot(slot, edge);
+            if (!state.Board.TryGetValue(neighborSlot, out var neighbor) || neighbor.Wonder is not null)
+                continue;
+            var theirs = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
+            var local = GameEngine.NormalizeRotation(edge - rotation);
+            if (terrain == Terrain.Village && theirs == Terrain.Village)
+                roads.Add(local);
+            if (terrain == Terrain.Mountain && theirs == Terrain.Mountain && slot < neighborSlot)
+                ridges.Add(local);
+        }
+
+        var villageTier = villageSize >= 18 ? 2 : villageSize >= 8 ? 1 : 0;
+        var forestTier = forestSize >= 36 ? 2 : forestSize >= 16 ? 1 : 0;
+        roads.Sort();
+        ridges.Sort();
+        return new TileContext(villageTier, roads, ridges, forestTier);
     }
 
     private static List<int> RegionSlots(GameState state, SectorRef anchor)
@@ -995,6 +1151,9 @@ public partial class Main : Node3D
         }
 
         var state = _session.State;
+        _wonderCard = -1;
+        foreach (var (wonderSlot, placedTile) in state.Board.Where(kv => kv.Value.Wonder is not null))
+            _board.SyncWonder(wonderSlot, placedTile.Built);
         _gameOverDelay = -1f;
         _scoreQueue.Clear();
         _shownScore = state.Score;
@@ -1006,6 +1165,7 @@ public partial class Main : Node3D
         _handSpawnDelay = 0.1f;
         RefreshCandidates();
         RefreshHud();
+        _board.RefreshContexts();
         AutoSave();
     }
 
@@ -1045,6 +1205,23 @@ public partial class Main : Node3D
             return;
 
         _botTimer -= dt;
+        if (_botPlan is null && _botTimer <= 0f && _session.State.WonderCards.Count > 0 && _wonderCard < 0)
+        {
+            var wonderPlan = GameEngine.FindBestWonderPlacement(_session.State, 0);
+            if (wonderPlan is not null)
+            {
+                _wonderCard = 0;
+                _rotation = wonderPlan.Rotation;
+                _rotationTurns = wonderPlan.Rotation;
+                SetHand(null, immediate: true, _session.State.WonderCards[0]);
+                _hoverSlot = wonderPlan.Slot;
+                Place(wonderPlan.Slot, wonderPlan.Rotation);
+                _hoverSlot = null;
+                _botTimer = _autoplay ? 0.5f : 1.0f;
+                return;
+            }
+        }
+
         if (_botPlan is null)
         {
             if (_botTimer > 0f)
@@ -1125,6 +1302,7 @@ public partial class Main : Node3D
         var state = _session.State;
         _hud.SetStack(state.CurrentTile, state.NextTile, state.TilesLeft, _rotation);
         _hud.SetUndo(state.UndosRemaining, _session.CanUndo);
+        _hud.SetWonderCards(_attract ? [] : state.WonderCards, _wonderCard);
         _hud.SetQuests(GameEngine.GetQuestStatuses(state));
         _hud.SetBest(Math.Max(_best, _shownScore));
         if (_shownScore > state.Score || _shownScore == 0)
@@ -1190,6 +1368,18 @@ public partial class Main : Node3D
         }
 
         _hud.UpdateQuestPins(pins);
+
+        var wonderPins = new List<(int, Vector2?, WonderProgress)>();
+        foreach (var (wonderSlot, placed) in _session.State.Board)
+        {
+            if (placed.Wonder is null || placed.Built)
+                continue;
+            var world = HexLayout.SlotToWorld(wonderSlot) + new Vector3(0, 1.0f, 0);
+            Vector2? screen = camera.IsPositionBehind(world) ? null : camera.UnprojectPosition(world);
+            wonderPins.Add((wonderSlot, screen, Wonders.Progress(_session.State, wonderSlot)));
+        }
+
+        _hud.UpdateWonderPins(wonderPins);
     }
 
     private static Vector3 RegionPinPosition(QuestStatus status)
@@ -1293,6 +1483,13 @@ public partial class Main : Node3D
 
     private void HandleKey(InputEventKey key)
     {
+        if (key.Keycode == Key.Escape && _wonderCard >= 0 && _mode == Mode.Playing)
+        {
+            ToggleWonder(_wonderCard);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (key.Keycode == Key.Escape)
         {
             if (_menus.Back())
@@ -1331,6 +1528,9 @@ public partial class Main : Node3D
             case Key.Home:
                 _rig.Reframe(IslandCentre(), IslandRadius());
                 _audio.Play(Sfx.Whoosh, 1.3f, -6f);
+                break;
+            case Key.G:
+                ToggleWonder(_wonderCard >= 0 ? _wonderCard : 0);
                 break;
             case Key.H:
             case Key.Space:

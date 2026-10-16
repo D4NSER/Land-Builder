@@ -10,7 +10,11 @@ public enum AnimatedPartKind
 {
     WindmillBlades,
     Boat,
-    WaterWheel
+    WaterWheel,
+    Crane,
+    Beam,
+    Rocket,
+    Static
 }
 
 public sealed record AnimatedPart(AnimatedPartKind Kind, Node3D Node, float Phase, Vector3 BasePosition);
@@ -34,8 +38,13 @@ public sealed partial class PropBuilder
     private readonly Node3D _partsRoot;
     private readonly RandomNumberGenerator _rng = new();
 
-    public PropBuilder(TerrainSampler sampler, TileSpec tile, int seed, Node3D partsRoot)
+    private readonly TileContext _context;
+    private readonly float _clearRadius;
+
+    public PropBuilder(TerrainSampler sampler, TileSpec tile, int seed, Node3D partsRoot, TileContext? context = null, float clearRadius = 0f)
     {
+        _context = context ?? TileContext.Empty;
+        _clearRadius = clearRadius;
         _sampler = sampler;
         _style = sampler.Style;
         _tile = tile;
@@ -45,9 +54,22 @@ public sealed partial class PropBuilder
 
     public IReadOnlyList<AnimatedPart> Parts => _parts;
 
+    /// <summary>Chimney tops (tile-local) where smoke rises.</summary>
+    public List<Vector3> Chimneys { get; } = new();
+
+    /// <summary>Number of blossoming cherry trees, which shed petals.</summary>
+    public int Cherries { get; private set; }
+
     public ArrayMesh? Build()
     {
         _rng.Seed = (ulong)(uint)_seed * 2654435761UL + 17UL;
+        if (_clearRadius > 0f)
+        {
+            // Wonder lots keep their centre clear; only the fringe gets grass and pebbles.
+            AddGroundDetail();
+            return _kit.IsEmpty ? null : _kit.Commit(withCustom: true);
+        }
+
         var counts = Enumerable.Range(0, 6).Select(_sampler.PropTerrain).GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
         int Count(Terrain t) => counts.GetValueOrDefault(t);
 
@@ -70,6 +92,17 @@ public sealed partial class PropBuilder
             TryLandmark(Terrain.Snow, AddCabin, 0.12f);
         if (_style.Architecture == Architecture.Japanese && (Count(Terrain.Forest) >= 2 || Count(Terrain.Water) >= 2) && _rng.Randf() < 0.3f)
             TryLandmark(Count(Terrain.Forest) >= 2 ? Terrain.Forest : Terrain.Grass, AddTorii, 0.08f);
+
+        // Structures shared with neighbours come first so the scatter keeps clear of them.
+        BuildRoads();
+        BuildRidges();
+        if (_context.VillageTier >= 1 && Count(Terrain.Village) >= 2 && _rng.Randf() < 0.5f + (_context.VillageTier * 0.2f))
+            TryLandmark(Terrain.Village, (p, s) => AddMarket(p, s * BuildingScale), 0.12f);
+        if (_context.ForestTier >= 1 && Count(Terrain.Forest) >= 2)
+        {
+            for (var i = 0; i < _context.ForestTier; i++)
+                TryLandmark(Terrain.Forest, (p, s) => AddAncientTree(p, s), 0.1f);
+        }
 
         if (Count(Terrain.Orchard) > 0)
             PlantOrchardRows();
@@ -95,7 +128,7 @@ public sealed partial class PropBuilder
                     Scatter(sector, terrain, N(1, 3), 0.1f, AddFieldDetail);
                     break;
                 case Terrain.Village:
-                    Scatter(sector, terrain, N(2, 4), 0.17f, (p, s) => AddHouse(p, s * BuildingScale));
+                    Scatter(sector, terrain, N(2, 4) + _context.VillageTier, 0.17f - (_context.VillageTier * 0.015f), (p, s) => AddHouse(p, s * BuildingScale));
                     Scatter(sector, terrain, N(1, 3), 0.06f, AddVillageGreen);
                     break;
                 case Terrain.Water:
@@ -235,6 +268,107 @@ public sealed partial class PropBuilder
 
     private float Ground(Vector3 p) => _sampler.Evaluate(p.X, p.Z).Height;
 
+    // ---------------------------------------------------------------- shared structures
+
+    private static Vector3 EdgeMid(int edge) => HexLayout.EdgeDirection(edge) * HexLayout.InRadius;
+
+    /// <summary>
+    /// Dirt roads from the village centre to every edge that meets a neighbouring village, with wooden bridges where
+    /// a road crosses a river. Neighbours draw their half from the same edge midpoint, so roads join up.
+    /// </summary>
+    private void BuildRoads()
+    {
+        if (_context.RoadEdges.Count == 0)
+            return;
+
+        var road = new Color("b39463");
+        var centre = Vector3.Zero;
+        foreach (var edge in _context.RoadEdges)
+        {
+            var end = EdgeMid(edge);
+            const int steps = 14;
+            for (var i = 0; i < steps; i++)
+            {
+                var a = centre.Lerp(end, i / (float)steps);
+                var b = centre.Lerp(end, (i + 1) / (float)steps);
+                var mid = (a + b) / 2f;
+                var dir = (b - a).Normalized();
+                var side = new Vector3(-dir.Z, 0, dir.X) * 0.038f;
+                var channel = _sampler.ChannelFactor(mid.X, mid.Z);
+                var ya = Ground(a);
+                var yb = Ground(b);
+                _occupied.Add(new Vector3(mid.X, 0, mid.Z));
+                Begin(mid with { Y = Ground(mid) });
+                _kit.Transform = Transform3D.Identity;
+                _kit.OrientFrom = null;
+                if (channel > 0.25f)
+                {
+                    // Bridge deck high over the water, with posts.
+                    var deck = Mathf.Max(TerrainSampler.WaterLevel + 0.05f, Mathf.Max(ya, yb) + 0.01f);
+                    var p0 = a with { Y = deck };
+                    var p1 = b with { Y = deck };
+                    _kit.Quad(p0 - side, p0 + side, p1 + side, p1 - side, new Color("a07a50"));
+                    At(mid with { Y = TerrainSampler.WaterLevel - 0.05f }, 0f, 1f);
+                    _kit.Box(new Vector3(0.012f, deck - TerrainSampler.WaterLevel + 0.05f, 0.012f), new Color("6b4a32"));
+                    continue;
+                }
+
+                var q0 = a with { Y = ya + 0.006f };
+                var q1 = b with { Y = yb + 0.006f };
+                _kit.Quad(q0 - side, q0 + side, q1 + side, q1 - side, road);
+            }
+
+            if (_context.VillageTier >= 1)
+            {
+                // Lamp posts line the bigger towns' streets.
+                var lamp = centre.Lerp(end, 0.55f) + (new Vector3(-(end - centre).Normalized().Z, 0, (end - centre).Normalized().X) * 0.06f);
+                lamp.Y = Ground(lamp);
+                if (_sampler.ChannelFactor(lamp.X, lamp.Z) < 0.05f)
+                {
+                    Begin(lamp);
+                    At(lamp, 0f, 1f);
+                    _kit.Box(new Vector3(0.006f, 0.07f, 0.006f), new Color("3a3a3a"));
+                    At(lamp + new Vector3(0, 0.07f, 0), 0f, 1f);
+                    _kit.Box(new Vector3(0.014f, 0.014f, 0.014f), new Color("ffe7a3"));
+                }
+            }
+        }
+
+        if (_context.RoadEdges.Count >= 2)
+        {
+            var c = centre with { Y = Ground(centre) };
+            Begin(c);
+            At(c + new Vector3(0, 0.004f, 0), 0f, 1f);
+            _kit.Frustum(10, 0.07f, 0.07f, 0.004f, road, road);
+            _occupied.Add(Vector3.Zero);
+        }
+    }
+
+    /// <summary>Mountain spines continue across matched mountain edges: a crag straddles the shared border.</summary>
+    private void BuildRidges()
+    {
+        foreach (var edge in _context.RidgeEdges)
+        {
+            var p = EdgeMid(edge) * 0.96f;
+            p.Y = Ground(p) - 0.04f;
+            Claim(p, 0.1f);
+            Begin(p);
+            var snowy = _style.Seasons.Snow > 0.3f || _style.SnowLine < 0.65f;
+            Spire(p, 0.11f, _rng.RandfRange(0.32f, 0.42f), 6, Vary(_style.GroundB(Terrain.Mountain), _rng, 0.05f), snowy, 0.4f);
+        }
+    }
+
+    /// <summary>Walls get taller as the village grows into a town and then a city.</summary>
+    private float StoreyFactor()
+    {
+        var storeys = 1f;
+        if (_context.VillageTier >= 1 && _rng.Randf() < 0.55f)
+            storeys += 0.8f;
+        if (_context.VillageTier >= 2 && _rng.Randf() < 0.45f)
+            storeys += 0.8f;
+        return storeys;
+    }
+
     // ---------------------------------------------------------------- ground detail
 
     /// <summary>Fine scatter over the whole tile: grass tufts, pebbles, and reeds where land meets water.</summary>
@@ -245,7 +379,7 @@ public sealed partial class PropBuilder
         for (var i = 0; i < tries; i++)
         {
             var p = new Vector3(_rng.RandfRange(-1f, 1f), 0, _rng.RandfRange(-1f, 1f)) * HexLayout.Radius;
-            if (HexLayout.DistanceToHexEdge(p.X, p.Z) < 0.03f)
+            if (HexLayout.DistanceToHexEdge(p.X, p.Z) < 0.03f || new Vector2(p.X, p.Z).Length() < _clearRadius)
                 continue;
             _sampler.TerrainWeights(p.X, p.Z, w);
             var sample = _sampler.Evaluate(p.X, p.Z);

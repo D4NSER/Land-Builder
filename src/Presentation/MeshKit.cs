@@ -138,6 +138,9 @@ public sealed class MeshKit
     /// <summary>Gabled roof: ridge along X, sitting on y=0, overhanging the given footprint.</summary>
     public void GableRoof(float width, float depth, float height, Color roof, Color gable)
     {
+        var sway = Sway;
+        if (Sway == Presentation.Sway.Building)
+            Sway = Presentation.Sway.Roof;
         var hx = width * 0.5f;
         var hz = depth * 0.5f;
         var l0 = new Vector3(-hx, 0, -hz);
@@ -155,6 +158,7 @@ public sealed class MeshKit
         Triangle(l0, l1, r1, gable);
         Triangle(l0, r1, r0, gable);
         OrientFrom = previous;
+        Sway = sway;
     }
 
     /// <summary>
@@ -163,6 +167,9 @@ public sealed class MeshKit
     /// </summary>
     public void HipRoof(float width, float depth, float height, Color roof, Color? under = null)
     {
+        var sway = Sway;
+        if (Sway == Presentation.Sway.Building)
+            Sway = Presentation.Sway.Roof;
         var hx = width * 0.5f;
         var hz = depth * 0.5f;
         var ridge = Mathf.Max(0f, (width - depth) * 0.5f);
@@ -182,6 +189,7 @@ public sealed class MeshKit
         Triangle(c0, c1, c2, u);
         Triangle(c0, c2, c3, u);
         OrientFrom = previous;
+        Sway = sway;
     }
 
     /// <summary>Low-poly blob (octahedron subdivided once and jittered).</summary>

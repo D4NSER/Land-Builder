@@ -28,6 +28,11 @@ public static class GameRules
 
     public const int MilestoneTileReward = 4;
 
+    /// <summary>Wonder cards come with every second milestone (the 2nd, 4th, ...) and every few quests.</summary>
+    public static bool MilestoneAwardsWonder(int index) => index % 2 == 1;
+
+    public const int QuestsPerWonder = 3;
+
     public static double MultiplierForStreak(int streak) => 1.0 + (Math.Min(streak, StreakCap) * StreakStep);
 
     /// <summary>Score needed for milestone <paramref name="index"/> (0-based). Gaps widen steadily.</summary>

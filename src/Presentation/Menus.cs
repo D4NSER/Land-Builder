@@ -323,6 +323,7 @@ public partial class Menus : Control
             (IconKind.Streak, new Color("e8553f"), "Streaks", "Clean fits against two or more tiles grow your streak multiplier (up to ×2). A mismatched edge resets it."),
             (IconKind.Flag, Palette.TerrainSwatch(Terrain.Forest), "Quests", "Grow the marked forest, field, village or lake to the target size for points and extra tiles. 'Exactly' quests fail if you overshoot; any quest fails if its area gets closed in."),
             (IconKind.Mountain, Palette.TerrainSwatch(Terrain.Mountain), "Milestones & themes", "Each island rolls a theme (Green Isles, Northern Reach, Sakura Shores, Coral Coast, Amber Vale, Sunlit Plains) with its own architecture and trees. Score milestones add tiles, unlock new terrains and turn the season."),
+            (IconKind.Star, Palette.AccentDeep, "Wonders", "Every second milestone and every third quest earns a wonder card (castle, cathedral, pagoda, harbour, lighthouse, rocket pad, observatory, park). Place it whenever you like (G); it completes when its neighbours supply the terrain it needs."),
             (IconKind.River, Palette.TerrainSwatch(Terrain.River), "Rivers", "Once unlocked, river edges must meet another river or flow into a lake. A tile that fits nowhere is set aside."),
             (IconKind.Stack, Palette.Ink, "Your stack", "The run ends when the stack runs out, so keep it alive with perfects, quests and milestones. You have 3 undos per island.")
         ];
@@ -404,6 +405,7 @@ public partial class Menus : Control
         Stat("Flawless fits", stats.FlawlessPlacements.ToString());
         Stat("Quests completed", $"{stats.QuestsCompleted}");
         Stat("Best streak", stats.BestStreak.ToString());
+        Stat("Wonders built", stats.WondersBuilt.ToString());
         Stat("Largest area", stats.LargestRegion > 0 ? $"{stats.LargestRegion} ({Terrains.DisplayName(stats.LargestRegionTerrain)})" : "-");
 
         _newBest.Visible = newBest;

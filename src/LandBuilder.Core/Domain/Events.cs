@@ -15,7 +15,8 @@ public enum PlacementRejectionReason
     NoTileInHand = 1,
     SlotOccupied = 2,
     NotConnected = 3,
-    RiverBlocked = 4
+    RiverBlocked = 4,
+    NoWonderCard = 5
 }
 
 /// <summary>Full breakdown of what a placement is worth. Also used for hover previews before committing.</summary>
@@ -69,6 +70,12 @@ public sealed record HandAdvancedEvent(TileSpec? Current, TileSpec? Next, int St
 
 /// <summary>The tile in hand fit nowhere (rivers cannot connect), so it was set aside and the next one drawn.</summary>
 public sealed record TileDiscardedEvent(TileSpec Tile) : IDomainEvent;
+
+public sealed record WonderAwardedEvent(WonderType Type, string Reason) : IDomainEvent;
+
+public sealed record WonderPlacedEvent(int Slot, WonderType Type, PlacementEvaluation Evaluation) : IDomainEvent;
+
+public sealed record WonderCompletedEvent(int Slot, WonderType Type, int Points, int Tiles) : IDomainEvent;
 
 public sealed record GameOverEvent(long FinalScore, RunStats Stats) : IDomainEvent;
 

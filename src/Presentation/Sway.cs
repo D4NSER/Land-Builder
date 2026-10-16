@@ -7,6 +7,12 @@ namespace LandBuilder.Presentation;
 public static class Sway
 {
     public const float Rigid = 0f;
+
+    /// <summary>Walls rise out of the ground when built.</summary>
+    public const float Building = 0.03f;
+
+    /// <summary>Roofs drop onto finished walls.</summary>
+    public const float Roof = 0.06f;
     public const float Trunk = 0.12f;
     public const float Bush = 0.5f;
     public const float Flower = 0.68f;

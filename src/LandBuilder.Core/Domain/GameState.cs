@@ -27,7 +27,8 @@ public sealed record RunStats(
     int QuestsFailed,
     int BestStreak,
     int LargestRegion,
-    Terrain LargestRegionTerrain)
+    Terrain LargestRegionTerrain,
+    int WondersBuilt = 0)
 {
     public static RunStats Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, Terrain.Grass);
 }
@@ -53,6 +54,9 @@ public sealed class GameState
     public int UndosRemaining { get; set; }
     public RunStats Stats { get; set; } = RunStats.Empty;
     public bool IsGameOver { get; set; }
+
+    /// <summary>Wonder cards held, placeable at any time without using the stack.</summary>
+    public List<WonderType> WonderCards { get; set; } = new();
 
     public int Turn => Stats.TilesPlaced;
 
@@ -105,7 +109,8 @@ public sealed class GameState
         MilestonesReached = MilestonesReached,
         UndosRemaining = UndosRemaining,
         Stats = Stats,
-        IsGameOver = IsGameOver
+        IsGameOver = IsGameOver,
+        WonderCards = new List<WonderType>(WonderCards)
     };
 
     /// <summary>Empty slots touching the island: the only legal placement targets.</summary>
@@ -127,8 +132,8 @@ public sealed class GameState
     /// <summary>Stable fingerprint for determinism checks.</summary>
     public string Fingerprint()
     {
-        var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}"));
+        var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}:{kv.Value.Wonder}:{kv.Value.Built}"));
         var quests = string.Join(";", Quests.Select(q => $"{q.Id}:{q.Terrain}:{q.Kind}:{q.Target}"));
-        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}";
+        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}|{string.Join(",", WonderCards)}";
     }
 }

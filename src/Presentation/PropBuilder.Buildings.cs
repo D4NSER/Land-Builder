@@ -24,7 +24,7 @@ public sealed partial class PropBuilder
 
     private void AddHouse(Vector3 p, float scale)
     {
-        _kit.Sway = Sway.Rigid;
+        _kit.Sway = Sway.Building;
         switch (_style.Architecture)
         {
             case Architecture.Nordic:
@@ -61,7 +61,7 @@ public sealed partial class PropBuilder
         var yaw = HouseYaw(p);
         var w = _rng.RandfRange(0.11f, 0.15f);
         var d = _rng.RandfRange(0.085f, 0.105f);
-        var h = _rng.RandfRange(0.07f, 0.1f);
+        var h = _rng.RandfRange(0.07f, 0.1f) * StoreyFactor();
         var wall = Wall();
         At(p + new Vector3(0, -0.01f, 0), yaw, scale);
         _kit.Box(new Vector3(w, h + 0.01f, d), wall);
@@ -71,8 +71,10 @@ public sealed partial class PropBuilder
         _kit.GableRoof(w * 1.12f, d * 1.22f, 0.065f, Roof(), wall.Darkened(0.06f));
         if (_rng.Randf() < 0.6f)
         {
-            At(Local(p, yaw, new Vector3(w * 0.28f, h + 0.03f, d * 0.18f), scale), yaw, scale);
+            var chimney = Local(p, yaw, new Vector3(w * 0.28f, h + 0.03f, d * 0.18f), scale);
+            At(chimney, yaw, scale);
             _kit.Box(new Vector3(0.018f, 0.05f, 0.018f), Palette.StoneDark);
+            Chimneys.Add(chimney + new Vector3(0, 0.05f * scale, 0));
         }
 
         Door(p, yaw, scale, d);
@@ -86,7 +88,7 @@ public sealed partial class PropBuilder
         var yaw = HouseYaw(p);
         const float w = 0.09f;
         const float d = 0.09f;
-        var h = _rng.RandfRange(0.13f, 0.16f);
+        var h = _rng.RandfRange(0.13f, 0.16f) * (1f + (_context.VillageTier * 0.35f));
         var wall = Wall();
         At(p + new Vector3(0, -0.01f, 0), yaw, scale);
         _kit.Box(new Vector3(w, h + 0.01f, d), wall);
@@ -163,7 +165,7 @@ public sealed partial class PropBuilder
         var yaw = HouseYaw(p);
         var w = _rng.RandfRange(0.12f, 0.15f);
         var d = _rng.RandfRange(0.085f, 0.1f);
-        var h = _rng.RandfRange(0.065f, 0.08f);
+        var h = _rng.RandfRange(0.065f, 0.08f) * StoreyFactor();
         var wall = Wall();
         At(p + new Vector3(0, -0.01f, 0), yaw, scale);
         _kit.Box(new Vector3(w, h + 0.01f, d), wall);
@@ -211,7 +213,7 @@ public sealed partial class PropBuilder
         var yaw = HouseYaw(p);
         var w = _rng.RandfRange(0.12f, 0.15f);
         var d = _rng.RandfRange(0.09f, 0.11f);
-        const float h = 0.065f;
+        var h = 0.065f * StoreyFactor();
         var wall = Wall();
         At(p + new Vector3(0, -0.01f, 0), yaw, scale);
         _kit.Box(new Vector3(w + 0.02f, 0.016f, d + 0.02f), new Color("8f8a80"));
@@ -430,7 +432,7 @@ public sealed partial class PropBuilder
 
     private void AddVillageLandmark(Vector3 p, float scale)
     {
-        _kit.Sway = Sway.Rigid;
+        _kit.Sway = Sway.Building;
         switch (_style.Architecture)
         {
             case Architecture.Nordic:
@@ -493,7 +495,7 @@ public sealed partial class PropBuilder
 
     private void AddFarmLandmark(Vector3 p, float scale)
     {
-        _kit.Sway = Sway.Rigid;
+        _kit.Sway = Sway.Building;
         switch (_style.Architecture)
         {
             case Architecture.Rustic:
@@ -512,6 +514,29 @@ public sealed partial class PropBuilder
             default:
                 AddWindmill(p, scale);
                 break;
+        }
+    }
+
+    /// <summary>Market square for towns: a fountain ringed by stalls with striped awnings.</summary>
+    private void AddMarket(Vector3 p, float scale)
+    {
+        _kit.Sway = Sway.Building;
+        At(p + new Vector3(0, 0.002f, 0), 0, scale);
+        _kit.Frustum(12, 0.11f, 0.11f, 0.006f, new Color("d9cdb0"), new Color("d9cdb0"));
+        At(p, 0, scale);
+        _kit.Frustum(10, 0.035f, 0.035f, 0.03f, Palette.Stone, new Color("6fc6d9"));
+        At(p + new Vector3(0, 0.03f * scale, 0), 0, scale);
+        _kit.Frustum(6, 0.008f, 0.006f, 0.05f, Palette.Stone);
+        Color[] awnings = [new("d0563f"), new("3d9ad1"), new("e8b23a"), new("6cc070")];
+        for (var i = 0; i < 4; i++)
+        {
+            var a = (i * Mathf.Tau / 4f) + 0.4f;
+            var stall = p + (new Vector3(Mathf.Cos(a) * 0.085f, 0, Mathf.Sin(a) * 0.085f) * scale);
+            stall.Y = Ground(stall);
+            At(stall, -a, scale);
+            _kit.Box(new Vector3(0.035f, 0.02f, 0.025f), new Color("a07a50"));
+            At(stall + new Vector3(0, 0.035f * scale, 0), -a, scale);
+            _kit.GableRoof(0.045f, 0.035f, 0.014f, awnings[i], Colors.White);
         }
     }
 

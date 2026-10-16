@@ -159,9 +159,17 @@ public sealed partial class PropBuilder
         }
     }
 
+    /// <summary>Old-growth giant that appears deep inside large forests.</summary>
+    private void AddAncientTree(Vector3 p, float scale)
+    {
+        var species = _style.Rainforest ? TreeSpecies.JungleGiant : _style.ConiferHeavy() ? TreeSpecies.Fir : TreeSpecies.Oak;
+        AddTree(species, p, scale * 1.75f);
+    }
+
     /// <summary>Cherry: dark crooked trunk and a wide, flat cloud of blossom.</summary>
     private void AddCherry(Vector3 p, float scale)
     {
+        Cherries++;
         var yaw = _rng.Randf() * Mathf.Tau;
         var bark = new Color("4a3a32");
         At(p, new Basis(Vector3.Up, yaw) * new Basis(Vector3.Forward, 0.18f) * Basis.Identity.Scaled(Vector3.One * scale));

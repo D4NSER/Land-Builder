@@ -46,7 +46,8 @@ public readonly record struct TileSpec(Terrain S0, Terrain S1, Terrain S2, Terra
     public override string ToString() => string.Join("/", ToArray());
 }
 
-public sealed record PlacedTile(TileSpec Tile, int Rotation, int Turn)
+/// <param name="Wonder">Set when this slot holds a wonder; <paramref name="Built"/> flips once its recipe is met.</param>
+public sealed record PlacedTile(TileSpec Tile, int Rotation, int Turn, WonderType? Wonder = null, bool Built = false)
 {
     public Terrain EdgeTerrain(int edge) => Tile.EdgeTerrain(edge, Rotation);
 }

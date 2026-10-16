@@ -111,10 +111,18 @@ public partial class BoardView : Node3D
             }
         }
 
+        return DuplicateVisual(template, tile);
+    }
+
+    private static TileVisual DuplicateVisual(TileVisual template, TileSpec tile)
+    {
         var root = (Node3D)template.Root.Duplicate();
         var body = root.GetNode<Node3D>("Body");
         var parts = new List<AnimatedPart>();
-        foreach (var child in body.GetNode<Node3D>("Parts").GetChildren())
+        var partNodes = body.GetNode<Node3D>("Parts").GetChildren().ToList();
+        if (body.GetNodeOrNull<Node3D>("WonderRoot") is { } wonderRoot)
+            partNodes.AddRange(wonderRoot.GetChildren().Where(n => n.Name != "Wonder"));
+        foreach (var child in partNodes)
         {
             if (child is not Node3D node)
                 continue;
@@ -122,6 +130,10 @@ public partial class BoardView : Node3D
             {
                 "WindmillBlades" => AnimatedPartKind.WindmillBlades,
                 "WaterWheel" => AnimatedPartKind.WaterWheel,
+                "Crane" => AnimatedPartKind.Crane,
+                "Beam" => AnimatedPartKind.Beam,
+                "Rocket" => AnimatedPartKind.Rocket,
+                "Glasshouse" => AnimatedPartKind.Static,
                 _ => AnimatedPartKind.Boat
             };
             parts.Add(new AnimatedPart(kind, node, (float)GD.RandRange(0, Mathf.Tau), node.Position));
@@ -134,20 +146,37 @@ public partial class BoardView : Node3D
             Ground = body.GetNode<MeshInstance3D>("Ground"),
             Props = body.GetNodeOrNull<MeshInstance3D>("Props"),
             Water = body.GetNodeOrNull<MeshInstance3D>("Water"),
+            WonderModel = body.GetNodeOrNull<MeshInstance3D>("WonderRoot/Wonder"),
             Parts = parts,
             Tile = tile,
-            Rotation = 0
+            Rotation = 0,
+            Wonder = template.Wonder
         };
     }
 
     public override void _ExitTree() => ClearDetachedCache();
 
+    private readonly Dictionary<WonderType, TileVisual> _wonderCache = new();
+
+    /// <summary>Hand visual for a wonder card: its tile with the construction site on top.</summary>
+    public TileVisual CreateDetachedWonderVisual(WonderType type)
+    {
+        if (!_wonderCache.TryGetValue(type, out var template))
+        {
+            template = CreateTileVisual(Wonders.Info(type).Edges, 0, Vector3.Zero, 777, wonder: type, built: false);
+            _wonderCache[type] = template;
+        }
+
+        return DuplicateVisual(template, template.Tile);
+    }
+
     /// <summary>Clears cached hand/preview visuals (their look depends on the island theme).</summary>
     public void ClearDetachedCache()
     {
-        foreach (var visual in _detachedCache.Values)
+        foreach (var visual in _detachedCache.Values.Concat(_wonderCache.Values))
             visual.Root.Free();
         _detachedCache.Clear();
+        _wonderCache.Clear();
         _detachedOrder.Clear();
     }
 
@@ -156,12 +185,16 @@ public partial class BoardView : Node3D
 
     public static List<double> BuildTimes { get; } = new();
 
-    public TileVisual CreateTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater = false)
+    /// <summary>Provides each board slot's surroundings (roads, town tier...) when tiles are built.</summary>
+    public Func<int, int, TileContext>? ContextProvider { get; set; }
+
+    public TileVisual CreateTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater = false,
+        WonderType? wonder = null, bool built = false, TileContext? context = null)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            return BuildTileVisual(tile, rotation, worldCenter, seed, worldWater);
+            return BuildTileVisual(tile, rotation, worldCenter, seed, worldWater, wonder, built, context ?? TileContext.Empty);
         }
         finally
         {
@@ -170,14 +203,15 @@ public partial class BoardView : Node3D
         }
     }
 
-    private TileVisual BuildTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater)
+    private TileVisual BuildTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater,
+        WonderType? wonder, bool built, TileContext context)
     {
         var root = new Node3D { Name = "Tile" };
         var body = new Node3D { Name = "Body", Rotation = new Vector3(0, HexLayout.RotationToYaw(rotation), 0) };
         root.AddChild(body);
 
         var toWorld = new Transform3D(new Basis(Vector3.Up, HexLayout.RotationToYaw(rotation)), worldCenter);
-        var sampler = new TerrainSampler(tile, toWorld, Style);
+        var sampler = new TerrainSampler(tile, toWorld, Style, wonderLot: wonder is not null);
         var (groundMesh, waterMesh) = TileMeshBuilder.Build(sampler, worldWater ? toWorld : null);
         var ground = new MeshInstance3D
         {
@@ -205,25 +239,14 @@ public partial class BoardView : Node3D
 
         var partsRoot = new Node3D { Name = "Parts" };
         body.AddChild(partsRoot);
-        var builder = new PropBuilder(sampler, tile, seed, partsRoot);
+        var builder = new PropBuilder(sampler, tile, seed, partsRoot, context, clearRadius: wonder is null ? 0f : 0.62f);
         var propsMesh = builder.Build();
-        MeshInstance3D? props = null;
-        if (propsMesh is not null)
-        {
-            props = new MeshInstance3D { Name = "Props", Mesh = propsMesh, MaterialOverride = _propsMaterial };
-            body.AddChild(props);
-        }
+        var props = new MeshInstance3D { Name = "Props", Mesh = propsMesh, MaterialOverride = _propsMaterial };
+        body.AddChild(props);
 
-        foreach (var part in builder.Parts)
-        {
-            foreach (var child in part.Node.GetChildren())
-            {
-                if (child is MeshInstance3D mi)
-                    mi.MaterialOverride = _propsMaterial;
-            }
-        }
+        PrepareParts(builder.Parts);
 
-        return new TileVisual
+        var visual = new TileVisual
         {
             Root = root,
             Body = body,
@@ -232,8 +255,180 @@ public partial class BoardView : Node3D
             Water = water,
             Parts = builder.Parts.ToList(),
             Tile = tile,
-            Rotation = rotation
+            Rotation = rotation,
+            Wonder = wonder,
+            WonderBuilt = built,
+            GroundHeight = (x, z) => sampler.Evaluate(x, z).Height,
+            ContextKey = context.Key,
+            Sampler = sampler,
+            Seed = seed
         };
+        AttachAmbientFx(visual, builder);
+
+        if (wonder is WonderType type)
+            AttachWonderModel(visual, type, built, seed);
+        return visual;
+    }
+
+    /// <summary>Chimney smoke and cherry petals, owned by the tile and replaced whenever its props are rebuilt.</summary>
+    private void AttachAmbientFx(TileVisual visual, PropBuilder builder)
+    {
+        foreach (var node in visual.AmbientFx)
+            node.QueueFree();
+        visual.AmbientFx.Clear();
+        visual.Petals = null;
+        if (Fx is { Intensity: <= 0.01f })
+            return;
+
+        foreach (var chimney in builder.Chimneys.Take(2))
+        {
+            var smoke = Fx.CreateChimneySmoke(chimney);
+            visual.Body.AddChild(smoke);
+            visual.AmbientFx.Add(smoke);
+        }
+
+        if (builder.Cherries > 0)
+        {
+            var petals = Fx.CreatePetals(builder.Cherries, Style.Blossoms[0].Lightened(0.15f));
+            visual.Body.AddChild(petals);
+            visual.AmbientFx.Add(petals);
+            visual.Petals = petals;
+        }
+    }
+
+    private readonly Queue<(int Slot, TileContext Context)> _rebuildQueue = new();
+
+    /// <summary>Queues prop rebuilds for tiles whose surroundings changed (a village grew, a road connected...).</summary>
+    public void RefreshContexts()
+    {
+        if (ContextProvider is null)
+            return;
+        foreach (var (slot, visual) in _tiles)
+        {
+            var context = ContextProvider(slot, visual.Rotation);
+            if (context.Key != visual.ContextKey && !_rebuildQueue.Any(q => q.Slot == slot))
+                _rebuildQueue.Enqueue((slot, context));
+        }
+    }
+
+    private void RebuildProps(int slot, TileContext context)
+    {
+        if (!_tiles.TryGetValue(slot, out var visual) || visual.Sampler is null || visual.Wonder is not null)
+            return;
+
+        var partsRoot = visual.Body.GetNode<Node3D>("Parts");
+        foreach (var part in visual.Parts.ToList())
+        {
+            if (visual.WonderParts.Contains(part))
+                continue;
+            visual.Parts.Remove(part);
+            part.Node.QueueFree();
+        }
+
+        var builder = new PropBuilder(visual.Sampler, visual.Tile, visual.Seed, partsRoot, context);
+        var mesh = builder.Build();
+        PrepareParts(builder.Parts);
+        visual.Parts.AddRange(builder.Parts);
+        if (visual.Props is not null)
+            visual.Props.Mesh = mesh;
+        visual.ContextKey = context.Key;
+        AttachAmbientFx(visual, builder);
+
+        // Things re-grow (buildings rise again) so growth reads as construction.
+        visual.SetGrow(0.35f);
+        visual.GrowSpeed = 0.8f;
+        Fx?.Burst(FxKind.Dust, HexLayout.SlotToWorld(slot) + new Vector3(0, 0.08f, 0), 0.5f);
+    }
+
+    private void PrepareParts(IEnumerable<AnimatedPart> parts)
+    {
+        foreach (var part in parts)
+        {
+            foreach (var child in part.Node.GetChildren())
+            {
+                if (child is MeshInstance3D mi && !mi.HasMeta("custom_material"))
+                    mi.MaterialOverride = _propsMaterial;
+            }
+
+            if (part.Kind == AnimatedPartKind.Rocket)
+                part.Node.AddChild(Fx.CreateExhaust());
+        }
+    }
+
+    /// <summary>Wonders are drawn larger than life so they tower over the neighbouring tiles.</summary>
+    private const float WonderScale = 1.55f;
+
+    private void AttachWonderModel(TileVisual visual, WonderType type, bool built, int seed)
+    {
+        // Built on the flat lot, then scaled up around the lot surface.
+        var holder = new Node3D
+        {
+            Name = "WonderRoot",
+            Scale = Vector3.One * WonderScale,
+            Position = new Vector3(0, -TerrainSampler.LotHeight * (WonderScale - 1f), 0)
+        };
+        visual.Body.AddChild(holder);
+        var builder = new WonderModelBuilder(visual.GroundHeight!, Style, holder, seed);
+        var mesh = new MeshInstance3D { Name = "Wonder", Mesh = builder.Build(type, built), MaterialOverride = _propsMaterial };
+        holder.AddChild(mesh);
+        PrepareParts(builder.Parts);
+        visual.WonderModel = mesh;
+        visual.WonderParts.Clear();
+        visual.WonderParts.AddRange(builder.Parts);
+        visual.Parts.AddRange(builder.Parts);
+        visual.WonderBuilt = built;
+    }
+
+    /// <summary>Swaps a wonder's construction site for the finished landmark, built up in stages.</summary>
+    public void CompleteWonder(int slot, bool animate = true)
+    {
+        if (!_tiles.TryGetValue(slot, out var visual) || visual.Wonder is not WonderType type || visual.WonderBuilt)
+            return;
+
+        var oldMesh = visual.WonderModel;
+        var oldParts = visual.WonderParts.ToList();
+        foreach (var part in oldParts)
+            visual.Parts.Remove(part);
+
+        AttachWonderModel(visual, type, built: true, SeedFor(slot, 0));
+        if (animate)
+        {
+            visual.WonderGrow = 0f;
+            visual.WonderGrowSpeed = 0.32f;
+            visual.WonderModel!.SetInstanceShaderParameter("grow", 0f);
+            foreach (var part in visual.WonderParts)
+                part.Node.Visible = false;
+        }
+
+        foreach (var node in oldParts.Select(p => (Node)p.Node).Append(oldMesh!.GetParent()))
+        {
+            if (node is not Node3D n || !IsInstanceValid(n))
+                continue;
+            var tween = n.CreateTween();
+            tween.TweenProperty(n, "scale", Vector3.One * 0.01f, animate ? 0.6 : 0.01).SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.In);
+            tween.TweenCallback(Callable.From(n.QueueFree));
+        }
+    }
+
+    /// <summary>Brings wonder visuals back in line with the rules after an undo.</summary>
+    public void SyncWonder(int slot, bool built)
+    {
+        if (!_tiles.TryGetValue(slot, out var visual) || visual.Wonder is not WonderType type || visual.WonderBuilt == built)
+            return;
+        if (built)
+        {
+            CompleteWonder(slot, animate: false);
+            return;
+        }
+
+        foreach (var part in visual.WonderParts)
+        {
+            visual.Parts.Remove(part);
+            part.Node.QueueFree();
+        }
+
+        visual.WonderModel?.GetParent().QueueFree();
+        AttachWonderModel(visual, type, built: false, SeedFor(slot, 0));
     }
 
     /// <summary>Switches palettes for a new island: lakes, sandbanks and every tile built from now on.</summary>
@@ -253,7 +448,8 @@ public partial class BoardView : Node3D
     public TileVisual AddTileImmediate(int slot, PlacedTile placed, bool pop, float delay = 0f)
     {
         RemoveTile(slot);
-        var visual = CreateTileVisual(placed.Tile, placed.Rotation, HexLayout.SlotToWorld(slot), SeedFor(slot, placed.Turn), worldWater: true);
+        var visual = CreateTileVisual(placed.Tile, placed.Rotation, HexLayout.SlotToWorld(slot), SeedFor(slot, placed.Turn), worldWater: true,
+            placed.Wonder, placed.Built, ContextProvider?.Invoke(slot, placed.Rotation));
         visual.Slot = slot;
         visual.Root.Position = HexLayout.SlotToWorld(slot);
         AddChild(visual.Root);
@@ -318,6 +514,7 @@ public partial class BoardView : Node3D
 
     public void Clear()
     {
+        _rebuildQueue.Clear();
         foreach (var tile in _tiles.Values)
             tile.Free();
         _tiles.Clear();
@@ -483,7 +680,29 @@ public partial class BoardView : Node3D
             if (tile.HighlightAlpha > 0.001f)
                 tile.SetHighlight(tile.HighlightColor, tile.HighlightAlpha * Mathf.Exp(-dt * 2.2f));
 
+            if (tile.WonderGrowSpeed > 0f)
+            {
+                tile.WonderGrow = Mathf.Min(1f, tile.WonderGrow + (dt * tile.WonderGrowSpeed));
+                tile.WonderModel?.SetInstanceShaderParameter("grow", tile.WonderGrow);
+                foreach (var part in tile.WonderParts)
+                    part.Node.Visible = tile.WonderGrow > 0.85f;
+                if (tile.WonderGrow >= 1f)
+                    tile.WonderGrowSpeed = 0f;
+            }
+
             AnimateParts(tile);
+            if (tile.Petals is not null)
+                tile.Petals.AmountRatio = Mathf.Clamp(0.25f + (SeasonDirector.LiveSpring * 0.9f) - (SeasonDirector.LiveSnow * 0.8f), 0.05f, 1f);
+        }
+
+        // One rebuild per frame keeps growth from hitching.
+        if (_rebuildQueue.Count > 0)
+        {
+            var (slot, context) = _rebuildQueue.Dequeue();
+            if (_tiles.TryGetValue(slot, out var waiting) && waiting.Landed)
+                RebuildProps(slot, context);
+            else if (_tiles.ContainsKey(slot))
+                _rebuildQueue.Enqueue((slot, context));
         }
 
         // Candidate outlines breathe gently; the hint one pulses.
@@ -511,6 +730,36 @@ public partial class BoardView : Node3D
         water.Visible = true;
     }
 
+    /// <summary>Every half minute the rocket lifts off on a plume of smoke; a fresh one then rises onto the pad.</summary>
+    private void AnimateRocket(AnimatedPart part)
+    {
+        const float period = 32f;
+        var t = Mathf.PosMod(_time + (part.Phase * 4f), period);
+        var exhaust = part.Node.GetNodeOrNull<GpuParticles3D>("Exhaust");
+        if (t < 26f)
+        {
+            part.Node.Position = part.BasePosition;
+            part.Node.Scale = Vector3.One * Mathf.Clamp(t / 1.5f, 0.01f, 1f);
+            if (exhaust is not null)
+                exhaust.Emitting = t > 24.5f;
+        }
+        else if (t < 31f)
+        {
+            var k = t - 26f;
+            part.Node.Position = part.BasePosition + new Vector3(0, Mathf.Pow(k, 2.3f) * 0.35f, 0);
+            part.Node.Scale = Vector3.One;
+            if (exhaust is not null)
+                exhaust.Emitting = k < 3.5f;
+        }
+        else
+        {
+            part.Node.Scale = Vector3.One * 0.01f;
+            part.Node.Position = part.BasePosition;
+            if (exhaust is not null)
+                exhaust.Emitting = false;
+        }
+    }
+
     private void AnimateParts(TileVisual tile)
     {
         foreach (var part in tile.Parts)
@@ -519,6 +768,15 @@ public partial class BoardView : Node3D
             {
                 case AnimatedPartKind.WindmillBlades:
                     part.Node.GetChild<Node3D>(0).Rotation = new Vector3(0, 0, (_time * 1.4f) + part.Phase);
+                    break;
+                case AnimatedPartKind.Crane:
+                    part.Node.Rotation = new Vector3(0, Mathf.Sin((_time * 0.35f) + part.Phase) * 1.4f, 0);
+                    break;
+                case AnimatedPartKind.Beam:
+                    part.Node.Rotation = new Vector3(0, (_time * 1.3f) + part.Phase, 0);
+                    break;
+                case AnimatedPartKind.Rocket:
+                    AnimateRocket(part);
                     break;
                 case AnimatedPartKind.WaterWheel:
                     part.Node.GetChild<Node3D>(0).Rotation = new Vector3((_time * 1.6f) + part.Phase, 0, 0);

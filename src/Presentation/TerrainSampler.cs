@@ -25,8 +25,14 @@ public sealed class TerrainSampler
     private readonly List<Vector2> _riverPath = new();
     private readonly bool _riverSpring;
 
-    public TerrainSampler(TileSpec tile, Transform3D toWorld, ThemeStyle style)
+    /// <summary>Height of the flattened building lot on wonder tiles.</summary>
+    public const float LotHeight = 0.05f;
+
+    private readonly bool _wonderLot;
+
+    public TerrainSampler(TileSpec tile, Transform3D toWorld, ThemeStyle style, bool wonderLot = false)
     {
+        _wonderLot = wonderLot;
         _sectors = tile.ToArray();
         _toWorld = toWorld;
         _style = style;
@@ -236,6 +242,13 @@ public sealed class TerrainSampler
         var color = new Color(r, g, b);
         var water = w[(int)Terrain.Water];
         var swamp = w[(int)Terrain.Swamp];
+
+        if (_wonderLot)
+        {
+            // Level a building lot in the middle; lakes stay lakes so harbours keep their water.
+            var lot = Mathf.SmoothStep(0.7f, 0.5f, Mathf.Sqrt((x * x) + (z * z))) * (1f - water);
+            height = Mathf.Lerp(height, LotHeight, lot);
+        }
 
         var channel = ChannelFactor(x, z);
         if (channel > 0f)

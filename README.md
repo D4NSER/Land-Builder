@@ -14,6 +14,8 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 
 ![Seasons: spring, summer, autumn, winter](docs/screenshots/seasons.jpg)
 
+![Wonders: castle, cathedral, lighthouse, rocket pad, great pagoda, observatory, harbour](docs/screenshots/wonders.jpg)
+
 ## Playing
 
 | Action | Input |
@@ -26,6 +28,7 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 | Re-centre | `F` |
 | Hint | `H` or `Space` |
 | Undo (3 per island) | `Ctrl+Z` or `Backspace` |
+| Pick up / put back a wonder card | Click the card or `G` (`Esc` cancels) |
 | Pause | `Esc` |
 | Fullscreen | `F11` |
 
@@ -41,6 +44,8 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
   | Coral Coast | Thatched stilt huts, longhouses, canoes; rainforest | jungle giants, palms, bananas, ferns |
   | Sunlit Plains | Rondavels, kraals, granaries | acacia, baobab |
   | Amber Vale | Rustic farmsteads, red barns, silos | maple, oak, pine |
+- **Wonders:** every second milestone and every third completed quest earns a wonder card: Castle, Cathedral, Great Pagoda, Harbour, Lighthouse, Rocket Pad, Observatory or Botanical Park. The theme favours some of them. Click the card (or press **G**) to pick it up, then place it anywhere. It doesn't use your stack. It starts as a construction site with a working crane. A pin shows its recipe, for example "5 village edges facing it". Once the neighbours supply it, the landmark is built in stages for big points and extra tiles. Rockets launch every half minute, lighthouse beams sweep, and harbour ships bob at anchor.
+- **Growing structures:** villages grow into towns and cities as their region grows. You get taller houses, market squares, lamp-lit streets, and roads that join matched village edges, with bridges over rivers. Mountain ridges continue across matched mountain edges, and big forests get ancient giant trees. Houses are built in place rather than popping in: walls rise, roofs drop on, chimneys smoke, and cherry trees shed petals.
 - **Seasons:** each milestone turns the season. Spring brings blossom, autumn turns the woods red and gold, and winter lays snow on roofs, trees and ground and freezes the lakes. Islands without winters get a dry or rainy season instead. Weather follows along: petals, pollen and fireflies, falling leaves, snowfall.
 - **Rivers:** unlocked at the second milestone on every island. River edges must meet another river or flow into a lake; a tile that can't legally go anywhere is set aside so you're never stuck.
 - **Perfect / Flawless:** touch 3+ tiles with every edge matching for a *Perfect* (bonus points + 1 tile). Fill a hole with all six edges matching for a *Flawless* (+100, +2 tiles).
@@ -82,7 +87,7 @@ Other debug flags (after `--`):
 - `--title`: shows the attract-mode title screen.
 - `--capture-dir=<dir> --capture-every=<frames>`: saves periodic screenshots and logs FPS.
 - `--zoom-water-at=<frame> --zoom-terrain=<Terrain>`: freezes the bot and zooms in on a terrain.
-- `--lab [--lab-terrains | --lab-showcase] [--lab-close] [--lab-far] [--theme=<Theme>] [--season=<Season>] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues and reviewing themes and seasons.
+- `--lab [--lab-terrains | --lab-showcase | --lab-wonders [--lab-sites]] [--lab-close] [--lab-far] [--theme=<Theme>] [--season=<Season>] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues and reviewing themes and seasons.
 
 Automated runs write to `user://automation/` and never touch your real save or leaderboard.
 
@@ -94,6 +99,7 @@ src/LandBuilder.Core/          Pure C# rules, no Godot dependency
   Domain/RegionMap.cs          Union-find over tile wedges for connected terrain areas
   Domain/TileGenerator.cs      Contiguous-segment tile generation with terrain affinities and river overlays
   Domain/WorldTheme.cs         Island themes: terrain weights and milestone unlock order
+  Domain/Wonders.cs            Wonder definitions, recipes, awards and progress
   Application/GameSession.cs   Current run, undo history, event fan-out
   Infrastructure/              Save (schema 5) and leaderboard persistence
 src/Presentation/              Godot layer
@@ -104,6 +110,8 @@ src/Presentation/              Godot layer
   PropBuilder.cs               Trees, houses, windmills, boats... merged per tile
   ThemeStyle.cs                Per-theme palettes, tree species, architecture, sea, sky and seasons
   Seasons.cs                   Season director feeding the season_* global shader parameters
+  WonderModels.cs              Landmark models and construction sites for wonder tiles
+  TileContext.cs               Per-tile neighbourhood (town tier, roads, ridges) for structures that span tiles
   PropBuilder*.cs              Props: core scatter, tree library, architecture sets, nature
   WorldView.cs                 Sky shader, sun and day progression, grading, ocean, seabed, clouds, birds, motes
   CameraRig.cs                 Eased orbit camera, auto-framing, shake, tilt-shift DOF

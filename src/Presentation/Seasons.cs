@@ -26,6 +26,11 @@ public partial class SeasonDirector : Node
 
     public Season Current { get; private set; } = Season.Spring;
 
+    /// <summary>Current eased values, readable by effects that aren't shaders (e.g. petal emitters).</summary>
+    public static float LiveSpring { get; private set; }
+
+    public static float LiveSnow { get; private set; }
+
     public static Season ForMilestones(int milestonesReached) => (Season)(milestonesReached % 4);
 
     public static string DisplayName(Season season, ThemeStyle style) => season switch
@@ -82,6 +87,8 @@ public partial class SeasonDirector : Node
 
     private void Push()
     {
+        LiveSpring = _spring;
+        LiveSnow = _snow;
         RenderingServer.GlobalShaderParameterSet("season_snow", _snow);
         RenderingServer.GlobalShaderParameterSet("season_autumn", _autumn);
         RenderingServer.GlobalShaderParameterSet("season_spring", _spring);

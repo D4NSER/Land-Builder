@@ -10,7 +10,8 @@ public static class GameEngine
 {
     private const int HintShortlistSize = 10;
 
-    public static PlacementEvaluation Evaluate(GameState state, int slot, int rotation)
+    /// <param name="tileOverride">Evaluate a different tile than the one in hand (wonder cards).</param>
+    public static PlacementEvaluation Evaluate(GameState state, int slot, int rotation, TileSpec? tileOverride = null)
     {
         rotation = NormalizeRotation(rotation);
 
@@ -19,7 +20,7 @@ public static class GameEngine
 
         if (state.IsGameOver)
             return Rejected(PlacementRejectionReason.GameOver);
-        if (state.CurrentTile is not TileSpec tile)
+        if ((tileOverride ?? state.CurrentTile) is not TileSpec tile)
             return Rejected(PlacementRejectionReason.NoTileInHand);
         if (state.Board.ContainsKey(slot))
             return Rejected(PlacementRejectionReason.SlotOccupied);
@@ -65,10 +66,24 @@ public static class GameEngine
         return new PlacementEvaluation(slot, rotation, true, null, matched, mismatched, neighbors, basePoints, multiplier, edgePoints, quality, bonus, tiles);
     }
 
-    public static (GameState State, IReadOnlyList<IDomainEvent> Events) Place(GameState state, int slot, int rotation)
+    public static (GameState State, IReadOnlyList<IDomainEvent> Events) Place(GameState state, int slot, int rotation) =>
+        PlaceInternal(state, slot, rotation, wonderCard: null);
+
+    /// <summary>Places the wonder card at <paramref name="cardIndex"/>. It does not use the stack or touch the streak.</summary>
+    public static (GameState State, IReadOnlyList<IDomainEvent> Events) PlaceWonder(GameState state, int cardIndex, int slot, int rotation) =>
+        PlaceInternal(state, slot, rotation, cardIndex);
+
+    public static PlacementEvaluation EvaluateWonder(GameState state, int cardIndex, int slot, int rotation)
+    {
+        if (cardIndex < 0 || cardIndex >= state.WonderCards.Count)
+            return new PlacementEvaluation(slot, NormalizeRotation(rotation), false, PlacementRejectionReason.NoWonderCard, [], [], 0, 0, state.StreakMultiplier, 0, PlacementQuality.Normal, 0, 0);
+        return Evaluate(state, slot, rotation, Wonders.Info(state.WonderCards[cardIndex]).Edges);
+    }
+
+    private static (GameState State, IReadOnlyList<IDomainEvent> Events) PlaceInternal(GameState state, int slot, int rotation, int? wonderCard)
     {
         var events = new List<IDomainEvent>();
-        var eval = Evaluate(state, slot, rotation);
+        var eval = wonderCard is int card ? EvaluateWonder(state, card, slot, rotation) : Evaluate(state, slot, rotation);
         if (!eval.IsValid)
         {
             events.Add(new PlacementRejectedEvent(slot, eval.RejectionReason!.Value, RejectionMessage(eval.RejectionReason.Value)));
@@ -77,26 +92,39 @@ public static class GameEngine
 
         var next = state.Clone();
         var rng = new Rng { State = next.RngState };
-        var tile = next.CurrentTile!.Value;
-        var turn = next.Turn + 1;
+        var isWonder = wonderCard is not null;
+        var turn = isWonder ? next.Turn : next.Turn + 1;
+        var stats = next.Stats;
 
-        next.Board[slot] = new PlacedTile(tile, eval.Rotation, turn);
-        next.CurrentTile = null;
-        next.Score += eval.TotalPoints;
-        events.Add(new TilePlacedEvent(slot, tile, eval.Rotation, eval));
-
-        var stats = next.Stats with
+        if (wonderCard is int cardSlot)
         {
-            TilesPlaced = turn,
-            PerfectPlacements = next.Stats.PerfectPlacements + (eval.Quality == PlacementQuality.Perfect ? 1 : 0),
-            FlawlessPlacements = next.Stats.FlawlessPlacements + (eval.Quality == PlacementQuality.Flawless ? 1 : 0)
-        };
+            var type = next.WonderCards[cardSlot];
+            next.WonderCards.RemoveAt(cardSlot);
+            next.Board[slot] = new PlacedTile(Wonders.Info(type).Edges, eval.Rotation, turn, type);
+            next.Score += eval.TotalPoints;
+            events.Add(new WonderPlacedEvent(slot, type, eval));
+        }
+        else
+        {
+            var tile = next.CurrentTile!.Value;
+            next.Board[slot] = new PlacedTile(tile, eval.Rotation, turn);
+            next.CurrentTile = null;
+            next.Score += eval.TotalPoints;
+            events.Add(new TilePlacedEvent(slot, tile, eval.Rotation, eval));
 
-        var previousStreak = next.Streak;
-        next.Streak = eval.BreaksStreak ? 0 : eval.BuildsStreak ? next.Streak + 1 : next.Streak;
-        stats = stats with { BestStreak = Math.Max(stats.BestStreak, next.Streak) };
-        if (next.Streak != previousStreak)
-            events.Add(new StreakChangedEvent(previousStreak, next.Streak, next.StreakMultiplier));
+            stats = stats with
+            {
+                TilesPlaced = turn,
+                PerfectPlacements = stats.PerfectPlacements + (eval.Quality == PlacementQuality.Perfect ? 1 : 0),
+                FlawlessPlacements = stats.FlawlessPlacements + (eval.Quality == PlacementQuality.Flawless ? 1 : 0)
+            };
+
+            var previousStreak = next.Streak;
+            next.Streak = eval.BreaksStreak ? 0 : eval.BuildsStreak ? next.Streak + 1 : next.Streak;
+            stats = stats with { BestStreak = Math.Max(stats.BestStreak, next.Streak) };
+            if (next.Streak != previousStreak)
+                events.Add(new StreakChangedEvent(previousStreak, next.Streak, next.StreakMultiplier));
+        }
 
         var tilesAwarded = 0;
         if (eval.TilesAwarded > 0)
@@ -120,6 +148,8 @@ public static class GameEngine
                 stats = stats with { QuestsCompleted = stats.QuestsCompleted + 1 };
                 events.Add(new QuestCompletedEvent(quest, size));
                 events.Add(new TilesAwardedEvent(quest.RewardTiles, "Quest"));
+                if (stats.QuestsCompleted % GameRules.QuestsPerWonder == 0)
+                    AwardWonder(next, ref rng, events, "Quests");
                 continue;
             }
 
@@ -149,6 +179,20 @@ public static class GameEngine
                 stats = stats with { LargestRegion = region.Size, LargestRegionTerrain = region.Terrain };
         }
 
+        // Wonders finish once their neighbours satisfy the recipe; any placement can complete one.
+        foreach (var wonderSlot in next.Board.Where(kv => kv.Value.Wonder is not null && !kv.Value.Built).Select(kv => kv.Key).ToList())
+        {
+            var progress = Wonders.Progress(next, wonderSlot);
+            if (!progress.Complete)
+                continue;
+            next.Board[wonderSlot] = next.Board[wonderSlot] with { Built = true };
+            next.Score += progress.Def.RewardPoints;
+            tilesAwarded += progress.Def.RewardTiles;
+            stats = stats with { WondersBuilt = stats.WondersBuilt + 1 };
+            events.Add(new WonderCompletedEvent(wonderSlot, progress.Def.Type, progress.Def.RewardPoints, progress.Def.RewardTiles));
+            events.Add(new TilesAwardedEvent(progress.Def.RewardTiles, "Wonder"));
+        }
+
         // Milestones may chain if a big quest pushes the score far enough.
         while (next.Score >= next.NextMilestoneScore)
         {
@@ -163,11 +207,22 @@ public static class GameEngine
                 unlock = null;
             events.Add(new MilestoneReachedEvent(index, threshold, GameRules.MilestoneTileReward, unlock));
             events.Add(new TilesAwardedEvent(GameRules.MilestoneTileReward, "Milestone"));
+            if (GameRules.MilestoneAwardsWonder(index))
+                AwardWonder(next, ref rng, events, "Milestone");
         }
 
         next.Stats = stats;
         next.StackCount += tilesAwarded;
-        AdvanceHand(next, ref rng, turn);
+        if (isWonder)
+        {
+            // The hand stays as it was; just make sure a freshly earned stack shows its next tile.
+            if (next.StackCount > 0 && next.NextTile is null)
+                next.NextTile = TileGenerator.Generate(ref rng, next.Unlocked, turn + 1, next.Quests.Select(q => q.Terrain).Distinct().ToArray(), next.Theme);
+        }
+        else
+        {
+            AdvanceHand(next, ref rng, turn);
+        }
 
         // Never strand the player: a tile whose rivers cannot connect anywhere is set aside.
         while (next.CurrentTile is TileSpec stuck && !HasAnyValidPlacement(next))
@@ -272,6 +327,66 @@ public static class GameEngine
         return value;
     }
 
+    private static void AwardWonder(GameState state, ref Rng rng, List<IDomainEvent> events, string reason)
+    {
+        if (state.WonderCards.Count >= Wonders.MaxCards)
+            return;
+        if (Wonders.Draw(ref rng, state) is WonderType type)
+        {
+            state.WonderCards.Add(type);
+            events.Add(new WonderAwardedEvent(type, reason));
+        }
+    }
+
+    /// <summary>
+    /// Where the bot (and the hint) would put a wonder card: legal spots that already satisfy as much of the recipe
+    /// as possible, leave room to finish it, and match edges.
+    /// </summary>
+    public static PlacementEvaluation? FindBestWonderPlacement(GameState state, int cardIndex)
+    {
+        if (cardIndex < 0 || cardIndex >= state.WonderCards.Count || state.IsGameOver)
+            return null;
+
+        var def = Wonders.Info(state.WonderCards[cardIndex]);
+        PlacementEvaluation? best = null;
+        var bestScore = double.MinValue;
+        foreach (var slot in state.CandidateSlots())
+        {
+            for (var rotation = 0; rotation < 6; rotation++)
+            {
+                var eval = EvaluateWonder(state, cardIndex, slot, rotation);
+                if (!eval.IsValid)
+                    continue;
+
+                var have = new Dictionary<Terrain, int>();
+                var empty = 0;
+                for (var edge = 0; edge < 6; edge++)
+                {
+                    if (state.Board.TryGetValue(HexGrid.NeighborSlot(slot, edge), out var neighbor))
+                    {
+                        var t = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
+                        have[t] = have.GetValueOrDefault(t) + 1;
+                    }
+                    else
+                    {
+                        empty++;
+                    }
+                }
+
+                var satisfied = def.Recipe.Sum(r => Math.Min(have.GetValueOrDefault(r.Key), r.Value));
+                var missing = def.Recipe.Sum(r => Math.Max(0, r.Value - have.GetValueOrDefault(r.Key)));
+                var score = (satisfied * 30.0) + eval.TotalPoints + (missing <= empty ? 25 : -60);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = eval;
+                }
+            }
+        }
+
+        return best;
+    }
+
     public static bool HasAnyValidPlacement(GameState state)
     {
         if (state.CurrentTile is null)
@@ -297,6 +412,7 @@ public static class GameEngine
         PlacementRejectionReason.SlotOccupied => "That spot is already taken.",
         PlacementRejectionReason.NotConnected => "Tiles must touch your land.",
         PlacementRejectionReason.RiverBlocked => "Rivers have to connect to a river or a lake.",
+        PlacementRejectionReason.NoWonderCard => "No wonder card to place.",
         _ => "Can't place there."
     };
 

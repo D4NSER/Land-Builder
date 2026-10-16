@@ -51,6 +51,21 @@ public sealed class GameSession
         return events;
     }
 
+    public IReadOnlyList<IDomainEvent> PlaceWonder(int cardIndex, int slot, int rotation)
+    {
+        var (next, events) = GameEngine.PlaceWonder(State, cardIndex, slot, rotation);
+        if (!ReferenceEquals(next, State))
+        {
+            _history.Push(State);
+            State = next;
+        }
+
+        foreach (var ev in events)
+            _sink.Publish(ev);
+
+        return events;
+    }
+
     /// <summary>Restores the state before the last placement. Undos are a limited per-run resource.</summary>
     public bool TryUndo(out int undoneSlot)
     {

@@ -45,6 +45,9 @@ public partial class Hud : Control
     private Control _hintPanel = null!;
     private Label _hintLabel = null!;
     private PanelContainer _hoverInfo = null!;
+    private VBoxContainer _wonderCards = null!;
+    private readonly Dictionary<int, Control> _wonderPins = new();
+    private string _wonderCardsKey = "";
     private Label _hoverInfoLabel = null!;
 
     private double _displayScore;
@@ -56,6 +59,7 @@ public partial class Hud : Control
     private float _milestoneDisplay;
     private float _milestoneTarget;
 
+    public event Action<int>? WonderCardPressed;
     public event Action? UndoPressed;
     public event Action? HintPressed;
     public event Action? PausePressed;
@@ -237,6 +241,11 @@ public partial class Hud : Control
         _nextPreview = new TilePreview(_tileFactory, 84, 4.9f) { Spin = false };
         nextCol.AddChild(_nextPreview);
 
+        // Wonder cards sit to the right of the stack.
+        _wonderCards = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, Position = new Vector2(334, -200) };
+        _wonderCards.AddThemeConstantOverride("separation", 8);
+        anchor.AddChild(_wonderCards);
+
         _controlsHint = UiKit.Text("Click to place  ·  Q / E or right-click to rotate  ·  Wheel zoom  ·  Drag to look around",
             15, new Color(Palette.Paper, 0.95f), UiKit.Bold, outline: 6, outlineColor: new Color(Palette.Ink, 0.5f));
         _controlsHint.SetAnchorsPreset(LayoutPreset.CenterBottom);
@@ -405,6 +414,124 @@ public partial class Hud : Control
             }
 
             card.Update(status);
+        }
+    }
+
+    /// <summary>Shows held wonder cards; the selected one is lifted and outlined.</summary>
+    public void SetWonderCards(IReadOnlyList<WonderType> cards, int selected)
+    {
+        var key = string.Join(",", cards) + "|" + selected;
+        if (key == _wonderCardsKey)
+            return;
+        var grew = cards.Count > _wonderCardsKey.Split('|')[0].Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+        _wonderCardsKey = key;
+        foreach (var child in _wonderCards.GetChildren())
+            child.QueueFree();
+
+        for (var i = 0; i < cards.Count; i++)
+        {
+            var def = Wonders.Info(cards[i]);
+            var index = i;
+            var isSelected = i == selected;
+            var button = new Button
+            {
+                CustomMinimumSize = new Vector2(250, 76),
+                FocusMode = FocusModeEnum.None,
+                MouseDefaultCursorShape = CursorShape.PointingHand,
+                TooltipText = def.Blurb
+            };
+            var border = isSelected ? Palette.AccentDeep : Palette.Gold;
+            button.AddThemeStyleboxOverride("normal", UiKit.Box(isSelected ? new Color("fff4d6") : new Color(Palette.Paper, 0.96f), 16, border: border, borderWidth: isSelected ? 4 : 3, shadow: 6));
+            button.AddThemeStyleboxOverride("hover", UiKit.Box(Colors.White, 16, border: Palette.AccentDeep, borderWidth: 4, shadow: 8));
+            button.AddThemeStyleboxOverride("pressed", UiKit.Box(Palette.PaperShade, 16, border: Palette.AccentDeep, borderWidth: 4, shadow: 2));
+            button.Pressed += () =>
+            {
+                _audio.Play(Sfx.UiClick);
+                WonderCardPressed?.Invoke(index);
+            };
+            UiKit.AddHoverBounce(button, _audio);
+
+            var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore, Position = new Vector2(10, 8) };
+            row.AddThemeConstantOverride("separation", 10);
+            button.AddChild(row);
+            row.AddChild(UiKit.Badge(IconKind.Star, Palette.AccentDeep, 46));
+            var col = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+            col.AddThemeConstantOverride("separation", 2);
+            row.AddChild(col);
+            col.AddChild(UiKit.Text(isSelected ? $"{def.Name}  ·  placing" : def.Name, 18, Palette.Ink, UiKit.Black));
+            var recipe = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+            recipe.AddThemeConstantOverride("separation", 4);
+            foreach (var (terrain, count) in def.Recipe)
+            {
+                recipe.AddChild(UiKit.Badge(Icon.ForTerrain(terrain), Palette.TerrainSwatch(terrain), 22));
+                recipe.AddChild(UiKit.Text($"×{count}", 15, Palette.InkSoft, UiKit.Black));
+            }
+
+            col.AddChild(recipe);
+            _wonderCards.AddChild(button);
+            if (isSelected || (grew && i == cards.Count - 1))
+            {
+                button.PivotOffset = new Vector2(125, 38);
+                button.Scale = Vector2.One * 1.15f;
+                button.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out).TweenProperty(button, "scale", Vector2.One, 0.4);
+            }
+        }
+    }
+
+    public Vector2 WonderCardAnchor => _wonderCards.GlobalPosition + new Vector2(125, 38);
+
+    /// <summary>Recipe progress pins over unfinished wonder sites.</summary>
+    public void UpdateWonderPins(IEnumerable<(int Slot, Vector2? Screen, WonderProgress Progress)> pins)
+    {
+        var seen = new HashSet<int>();
+        foreach (var (slot, screen, progress) in pins)
+        {
+            seen.Add(slot);
+            if (!_wonderPins.TryGetValue(slot, out var pin))
+            {
+                pin = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
+                pin.AddThemeStyleboxOverride("panel", UiKit.Box(new Color(Palette.Paper, 0.96f), 16, border: Palette.Gold, borderWidth: 3, shadow: 5, padH: 8, padV: 4));
+                var row = new HBoxContainer { Name = "Row", MouseFilter = MouseFilterEnum.Ignore };
+                row.AddThemeConstantOverride("separation", 5);
+                pin.AddChild(row);
+                row.AddChild(UiKit.Badge(IconKind.Star, Palette.AccentDeep, 24));
+                foreach (var terrain in progress.Def.Recipe.Keys)
+                {
+                    row.AddChild(UiKit.Badge(Icon.ForTerrain(terrain), Palette.TerrainSwatch(terrain), 22));
+                    var label = UiKit.Text("", 16, Palette.Ink, UiKit.Black);
+                    label.Name = $"T{(int)terrain}";
+                    row.AddChild(label);
+                }
+
+                _wonderPins[slot] = pin;
+                _pinLayer.AddChild(pin);
+                pin.Scale = Vector2.Zero;
+                pin.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out).TweenProperty(pin, "scale", Vector2.One, 0.45);
+            }
+
+            pin.Visible = screen is not null;
+            if (screen is Vector2 s)
+            {
+                pin.Position = s - new Vector2(pin.Size.X / 2f, pin.Size.Y + 8);
+                pin.PivotOffset = new Vector2(pin.Size.X / 2f, pin.Size.Y);
+            }
+
+            foreach (var (terrain, need) in progress.Def.Recipe)
+            {
+                var label = pin.GetNode<Label>($"Row/T{(int)terrain}");
+                var have = Math.Min(progress.Have.GetValueOrDefault(terrain), need);
+                label.Text = $"{have}/{need}";
+                label.LabelSettings.FontColor = have >= need ? Palette.Good.Darkened(0.2f) : Palette.Ink;
+            }
+        }
+
+        foreach (var slot in _wonderPins.Keys.Where(k => !seen.Contains(k)).ToList())
+        {
+            var pin = _wonderPins[slot];
+            _wonderPins.Remove(slot);
+            var tween = pin.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.In);
+            tween.TweenProperty(pin, "scale", Vector2.Zero, 0.25);
+            tween.TweenCallback(Callable.From(pin.QueueFree));
         }
     }
 

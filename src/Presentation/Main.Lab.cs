@@ -21,7 +21,28 @@ public partial class Main
         var state = GameState.CreateInitial(5, theme);
         state.Board.Clear();
         var origin = HexGrid.OriginSlotIndex;
-        if (args.Contains("--lab-showcase"))
+        if (args.Contains("--lab-wonders"))
+        {
+            // All eight wonders, finished (or as sites with --lab-sites), on a meadow.
+            var built = !args.Contains("--lab-sites");
+            for (var q = -4; q <= 4; q++)
+            {
+                for (var r = -3; r <= 3; r++)
+                {
+                    if (System.Math.Abs(q + r) > 4)
+                        continue;
+                    state.Board[HexGrid.Encode(new HexCoord(q, r))] = new PlacedTile(TileSpec.Pure(Terrain.Grass), 0, 0);
+                }
+            }
+
+            (int Q, int R)[] spots = [(-3, -1), (-1, -1), (1, -1), (3, -1), (-3, 1), (-1, 1), (1, 1), (3, 1)];
+            for (var i = 0; i < spots.Length; i++)
+            {
+                var type = (WonderType)i;
+                state.Board[HexGrid.Encode(new HexCoord(spots[i].Q, spots[i].R))] = new PlacedTile(Wonders.Info(type).Edges, 0, 0, type, built);
+            }
+        }
+        else if (args.Contains("--lab-showcase"))
         {
             static TileSpec T(params Terrain[] t) => TileSpec.FromArray(t);
             var V = Terrain.Village;
@@ -99,7 +120,7 @@ public partial class Main
         _hand = null;
         _board.SetCandidatesVisible(false);
         var far = args.Contains("--lab-far");
-        var showcase = args.Contains("--lab-showcase");
+        var showcase = args.Contains("--lab-showcase") || args.Contains("--lab-wonders");
         var close = args.Contains("--lab-close");
         _rig.Reframe(showcase ? new Vector3(0.4f, 0, 0.2f) : new Vector3(0.6f, 0, 0), far ? 7f : close ? 0.2f : showcase ? 2.6f : args.Contains("--lab-terrains") ? 1.8f : 1.0f, instant: true);
         if (close)
