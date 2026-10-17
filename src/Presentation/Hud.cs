@@ -436,7 +436,7 @@ public partial class Hud : Control
             var isSelected = i == selected;
             var button = new Button
             {
-                CustomMinimumSize = new Vector2(250, 76),
+                CustomMinimumSize = new Vector2(270, 76),
                 FocusMode = FocusModeEnum.None,
                 MouseDefaultCursorShape = CursorShape.PointingHand,
                 TooltipText = def.Blurb
@@ -455,7 +455,7 @@ public partial class Hud : Control
             var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore, Position = new Vector2(10, 8) };
             row.AddThemeConstantOverride("separation", 10);
             button.AddChild(row);
-            row.AddChild(UiKit.Badge(IconKind.Star, Palette.AccentDeep, 46));
+            row.AddChild(new FootprintIcon(def, 56));
             var col = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
             col.AddThemeConstantOverride("separation", 2);
             row.AddChild(col);
@@ -491,7 +491,7 @@ public partial class Hud : Control
     /// Progress pins over unfinished blueprints ("Castle 1/3"), plus a small pin on every empty plot showing which
     /// tile it needs.
     /// </summary>
-    public void UpdateWonderPins(IEnumerable<(int Id, Vector2? Screen, WonderProgress Progress)> sites, IEnumerable<(int Slot, Vector2? Screen, WonderCell Rule)> plots)
+    public void UpdateWonderPins(IEnumerable<(int Id, Vector2? Screen, WonderProgress Progress)> sites, IEnumerable<(int Slot, Vector2? Screen, WonderCell Rule, bool? Fits)> plots)
     {
         var seen = new HashSet<int>();
         foreach (var (id, screen, progress) in sites)
@@ -521,22 +521,35 @@ public partial class Hud : Control
         Retire(_wonderPins, seen);
 
         var seenPlots = new HashSet<int>();
-        foreach (var (slot, screen, rule) in plots)
+        foreach (var (slot, screen, rule, fits) in plots)
         {
             seenPlots.Add(slot);
             if (!_plotPins.TryGetValue(slot, out var pin))
             {
                 var color = Palette.TerrainSwatch(rule.Terrain);
                 pin = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
-                pin.AddThemeStyleboxOverride("panel", UiKit.Box(new Color(Palette.Paper, 0.9f), 14, border: Palette.Gold, borderWidth: 2, shadow: 3, padH: 5, padV: 2));
-                var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+                var row = new HBoxContainer { Name = "Row", MouseFilter = MouseFilterEnum.Ignore };
                 row.AddThemeConstantOverride("separation", 3);
                 pin.AddChild(row);
                 row.AddChild(UiKit.Badge(Icon.ForTerrain(rule.Terrain), color, 20));
                 row.AddChild(UiKit.Text(rule.Min > 1 ? $"{rule.Min}+" : "1+", 14, Palette.Ink, UiKit.Black));
+                var tick = UiKit.Text("fits!", 13, Palette.Good.Darkened(0.3f), UiKit.Black);
+                tick.Name = "Fits";
+                row.AddChild(tick);
                 _plotPins[slot] = pin;
                 _pinLayer.AddChild(pin);
                 Pop(pin);
+            }
+
+            // Restyle only when the hand tile's fit changes.
+            var state = fits switch { true => 1, false => 2, _ => 0 };
+            if (!pin.HasMeta("fit") || pin.GetMeta("fit").AsInt32() != state)
+            {
+                pin.SetMeta("fit", state);
+                var border = state == 1 ? Palette.Good : Palette.Gold;
+                pin.AddThemeStyleboxOverride("panel", UiKit.Box(new Color(Palette.Paper, state == 2 ? 0.7f : 0.95f), 14, border: border, borderWidth: state == 1 ? 3 : 2, shadow: 3, padH: 5, padV: 2));
+                pin.GetNode<Label>("Row/Fits").Visible = state == 1;
+                pin.Modulate = new Color(1, 1, 1, state == 2 ? 0.75f : 1f);
             }
 
             Place(pin, screen, 0);

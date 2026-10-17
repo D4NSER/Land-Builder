@@ -19,7 +19,8 @@ public partial class Main
         await Wait(0.5f);
         Log("starting");
         StartNewGame(777UL);
-        await Wait(1.8f);
+        // Let the intro swoop settle so screen positions are stable.
+        await Wait(3.0f);
 
         // --- hover + rotate + click to place
         var best = GameEngine.FindBestPlacement(_session.State)!;
@@ -148,7 +149,9 @@ public partial class Main
 
         var wonderSpot = SlotScreen(wonderPlan.Anchor);
         Motion(wonderSpot);
-        await Wait(0.2f);
+        await Wait(0.6f);
+        Check(_sitePlan is not null, "hovering with a wonder card previews its blueprint");
+        Snap("wonder_ghost");
         Click(wonderSpot, MouseButton.Left);
         await Wait(1.0f);
         Check(_session.State.Sites.Count == 1 && _session.State.Sites[0].Type == WonderType.Cathedral, "clicking lays the wonder blueprint");

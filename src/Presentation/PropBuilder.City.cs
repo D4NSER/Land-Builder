@@ -24,11 +24,17 @@ public sealed partial class PropBuilder
         // One spire at the very heart of a Capital; glass towers cluster downtown and thin out towards the edge.
         var downtown = _context.Downtown;
         if (tier >= CapitalTier && downtown >= 1f && villageSectors >= 3)
-            TryLandmark(Terrain.Village, (p, _) => AddSpireTower(p), 0.14f);
+            TryLandmark(Terrain.Village, (p, _) => AddCapitalLandmark(p), 0.14f);
 
         var towers = tier >= MetropolisTier ? Mathf.RoundToInt(downtown * (villageSectors >= 4 ? 3.2f : 2f)) : 0;
         for (var i = 0; i < towers; i++)
-            TryLandmark(Terrain.Village, (p, s) => AddGlassTower(p, s * (0.75f + (downtown * 0.35f))), 0.09f);
+            TryLandmark(Terrain.Village, (p, s) => AddTowerShape(p, s * (0.75f + (downtown * 0.35f))), 0.09f);
+
+        // Open space: parks off the centre, and a stadium on the edge of a big city.
+        if (villageSectors >= 3 && downtown is > 0.2f and < 0.85f && _rng.Randf() < 0.35f)
+            TryLandmark(Terrain.Village, AddCityPark, 0.14f);
+        if (tier >= MetropolisTier && villageSectors >= 4 && downtown < 0.6f && _rng.Randf() < 0.3f)
+            TryLandmark(Terrain.Village, AddStadium, 0.2f);
 
         var blocks = Mathf.RoundToInt((0.6f + downtown) * (villageSectors >= 4 ? 2f : 1.2f));
         for (var i = 0; i < blocks; i++)
@@ -84,21 +90,14 @@ public sealed partial class PropBuilder
             }
         }
 
-        At(p + new Vector3(0, h, 0), yaw, scale);
-        _kit.Box(new Vector3(w + 0.012f, 0.012f, d + 0.012f), wall.Darkened(0.12f));
-        if (_rng.Randf() < 0.5f)
+        // Shopfront awnings on the ground floor of downtown blocks.
+        if (_context.Downtown > 0.3f && _rng.Randf() < 0.6f)
         {
-            At(Local(p, yaw, new Vector3(w * 0.22f, h + 0.012f, 0), scale), yaw, scale);
-            _kit.Frustum(8, 0.018f, 0.018f, 0.035f, new Color("8b6a4a"));
-            At(Local(p, yaw, new Vector3(w * 0.22f, h + 0.047f, 0), scale), yaw, scale);
-            _kit.Frustum(8, 0.02f, 0f, 0.015f, new Color("5a4636"));
+            At(Local(p, yaw, new Vector3(0, storey * 0.75f, (d / 2f) + 0.012f), scale), yaw, scale);
+            _kit.Box(new Vector3(w * 0.9f, 0.008f, 0.024f), Pick(new[] { new Color("d0563f"), new Color("3d9ad1"), new Color("e8b23a"), new Color("6cc070") }));
         }
-        else
-        {
-            _kit.Sway = Sway.Bush;
-            At(p + new Vector3(0, h + 0.012f, 0), yaw, scale);
-            _kit.Blob(new Vector3(w * 0.35f, 0.012f, d * 0.3f), Pick(_style.Leaves), _rng.RandiRange(0, 99), 0.15f);
-        }
+
+        ApartmentRoof(p, yaw, scale, w, d, h, wall);
     }
 
     /// <summary>A glass tower: stone podium, banded shaft, setback crown and an antenna.</summary>
@@ -108,7 +107,7 @@ public sealed partial class PropBuilder
         var yaw = HouseYaw(p);
         var height = _rng.RandfRange(0.38f, 0.62f) * (_context.VillageTier >= CapitalTier ? 1.15f : 1f);
         var w = _rng.RandfRange(0.085f, 0.11f);
-        var glass = Pick(new[] { new Color("7fa7c4"), new Color("8bb8c9"), new Color("6f93ad"), new Color("a6c3cf") });
+        var glass = TowerGlass();
         var podium = CityWall();
         At(p + new Vector3(0, -0.01f, 0), yaw, scale);
         _kit.Box(new Vector3(w * 1.5f, 0.06f, w * 1.5f), podium);

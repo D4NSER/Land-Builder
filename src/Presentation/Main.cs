@@ -620,6 +620,14 @@ public partial class Main : Node3D
             var (text, color) = DescribePlan(plan);
             _hud.SetHoverInfo(_mode == Mode.Playing ? screen : null, text, color);
         }
+        else if (_hoverEval is { RejectionReason: PlacementRejectionReason.WrongTileForPlot } wrong && !_handHidden && !_attract
+                 && Wonders.PlotAt(_session.State, wrong.Slot) is { } needs)
+        {
+            _board.HideEdgeMarkers();
+            var screen = _rig.Camera.UnprojectPosition(_hand.Root.Position + new Vector3(0, 0.45f, 0));
+            var terrain = Terrains.DisplayName(needs.Rule.Terrain).ToLowerInvariant();
+            _hud.SetHoverInfo(_mode == Mode.Playing ? screen : null, $"{Wonders.Info(needs.Site.Type).Name} plot: needs {needs.Rule.Min}+ {terrain}", new Color("ffb4a8"));
+        }
         else if (_hoverEval is { IsValid: true } eval && _hoverSlot is not null && _settings.EdgeHints && !_handHidden && !_attract)
         {
             _board.ShowEdgeMarkers(_hand.Root.Position + new Vector3(0, 0.12f, 0), eval);
@@ -706,6 +714,7 @@ public partial class Main : Node3D
 
         _audio.Play(Sfx.Whoosh, 1.2f, -4f);
         RefreshHoverEval();
+        RefreshPlotFits();
         RefreshHud();
     }
 
@@ -1562,8 +1571,28 @@ public partial class Main : Node3D
             .Take(4)
             .ToList();
 
+    private Dictionary<int, bool> _plotFits = new();
+
+    /// <summary>Which waiting blueprint plots the tile in hand would suit (none while a wonder card is held).</summary>
+    private void RefreshPlotFits()
+    {
+        var state = _session.State;
+        _plotFits = new Dictionary<int, bool>();
+        if (_wonderCard < 0 && !_attract && state.CurrentTile is TileSpec tile)
+        {
+            foreach (var site in state.Sites.Where(s => !s.Built))
+            {
+                foreach (var plot in Wonders.Progress(state, site).Plots.Where(p => !p.Filled))
+                    _plotFits[plot.Slot] = Wonders.Suits(plot.Rule, tile);
+            }
+        }
+
+        _board.SetPlotFit(_plotFits);
+    }
+
     private void RefreshCandidates()
     {
+        RefreshPlotFits();
         var state = _session.State;
         _board.SetCandidates(state.IsGameOver ? Array.Empty<int>() : state.CandidateSlots(), _hintSlot);
         var radius = IslandRadius();
@@ -1622,13 +1651,13 @@ public partial class Main : Node3D
 
         Vector2? Screen(Vector3 world) => camera.IsPositionBehind(world) ? null : camera.UnprojectPosition(world);
         var sitePins = new List<(int, Vector2?, WonderProgress)>();
-        var plotPins = new List<(int, Vector2?, WonderCell)>();
+        var plotPins = new List<(int, Vector2?, WonderCell, bool?)>();
         foreach (var site in _session.State.Sites.Where(s => !s.Built))
         {
             var progress = Wonders.Progress(_session.State, site);
             sitePins.Add((site.Id, Screen(BoardView.SitePinPosition(site)), progress));
             foreach (var plot in progress.Plots.Where(p => !p.Filled))
-                plotPins.Add((plot.Slot, Screen(HexLayout.SlotToWorld(plot.Slot) + new Vector3(0, 0.25f, 0)), plot.Rule));
+                plotPins.Add((plot.Slot, Screen(HexLayout.SlotToWorld(plot.Slot) + new Vector3(0, 0.25f, 0)), plot.Rule, _plotFits.TryGetValue(plot.Slot, out var fits) ? fits : null));
         }
 
         _hud.UpdateWonderPins(sitePins, plotPins);

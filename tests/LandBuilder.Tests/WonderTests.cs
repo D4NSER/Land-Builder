@@ -134,6 +134,30 @@ public sealed class WonderTests
     }
 
     [Fact]
+    public void WaitingPlots_GetSuitableTilesDealt()
+    {
+        var state = Board((Slot(0, 0), TileSpec.Pure(Terrain.Grass)));
+        state.Unlocked = Terrains.Starting.ToList();
+        state.WonderCards.Add(WonderType.Cathedral);
+        (state, _) = GameEngine.PlaceWonder(state, 0, Slot(1, 0), 0);
+        var rule = Wonders.Info(WonderType.Cathedral).Cells[0];
+
+        // Keep playing meadow tiles far from the blueprint and count how many dealt tiles would suit a plot.
+        var suited = 0;
+        for (var i = 0; i < 60; i++)
+        {
+            if (state.NextTile is TileSpec next && Wonders.Suits(rule, next))
+                suited++;
+            state.CurrentTile = TileSpec.Pure(Terrain.Grass);
+            var spot = state.CandidateSlots().First(s => Wonders.PlotAt(state, s) is null);
+            (state, _) = GameEngine.Place(state, spot, 0);
+            state.StackCount = Math.Max(state.StackCount, 5);
+        }
+
+        Assert.True(suited >= 12, $"only {suited} of 60 tiles suited the cathedral plots");
+    }
+
+    [Fact]
     public void SecondMilestone_AwardsAWonderCard()
     {
         var grass = TileSpec.Pure(Terrain.Grass);

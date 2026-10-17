@@ -117,6 +117,20 @@ public static class TileGenerator
         return TileSpec.FromArray(rotated);
     }
 
+    /// <summary>
+    /// A tile that suits a blueprint plot: a normal tile with a run of at least <paramref name="min"/> sectors of
+    /// <paramref name="terrain"/> laid over it, so wonders do not stall waiting for a rare layout.
+    /// </summary>
+    public static TileSpec GenerateFor(ref Rng rng, IReadOnlyCollection<Terrain> unlocked, int turn, Terrain terrain, int min, WorldTheme theme)
+    {
+        var sectors = Generate(ref rng, unlocked, turn, theme: theme).ToArray();
+        var run = Math.Clamp(min + rng.NextInt(2), 1, 6);
+        var start = rng.NextInt(6);
+        for (var i = 0; i < run; i++)
+            sectors[(start + i) % 6] = terrain;
+        return TileSpec.FromArray(sectors);
+    }
+
     /// <summary>Overwrites one to three edges with river: mostly bends and straights, sometimes a fork or a spring.</summary>
     private static void LayRiver(ref Rng rng, Terrain[] sectors)
     {

@@ -37,6 +37,9 @@ public static class GameRules
 
     public const int QuestsPerWonder = 3;
 
+    /// <summary>While a blueprint has empty plots, this share of new tiles is dealt to suit one of them.</summary>
+    public const double PlotTileChance = 0.3;
+
     public static double MultiplierForStreak(int streak) => 1.0 + (Math.Min(streak, StreakCap) * StreakStep);
 
     /// <summary>Score needed for milestone <paramref name="index"/> (0-based). Gaps widen steadily.</summary>

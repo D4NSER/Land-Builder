@@ -544,6 +544,22 @@ public static class GameEngine
         events.Add(new QuestStartedEvent(quest, region.Size));
     }
 
+    /// <summary>The next tile from the stack, sometimes made to suit a blueprint plot that is still waiting.</summary>
+    private static TileSpec DealTile(GameState state, ref Rng rng, int turn, Terrain[] wanted)
+    {
+        var plots = state.Sites
+            .Where(s => !s.Built)
+            .SelectMany(s => Wonders.Progress(state, s).Plots.Where(p => !p.Filled).Select(p => p.Rule))
+            .ToList();
+        if (plots.Count > 0 && rng.Chance(GameRules.PlotTileChance))
+        {
+            var rule = plots[rng.NextInt(plots.Count)];
+            return TileGenerator.GenerateFor(ref rng, state.Unlocked, turn, rule.Terrain, rule.Min, state.Theme);
+        }
+
+        return TileGenerator.Generate(ref rng, state.Unlocked, turn, wanted, state.Theme);
+    }
+
     private static void AdvanceHand(GameState state, ref Rng rng, int turn)
     {
         var questTerrains = WantedTerrains(state);
@@ -561,8 +577,6 @@ public static class GameEngine
 
         state.CurrentTile = state.NextTile;
         state.StackCount -= 1;
-        state.NextTile = state.StackCount > 0
-            ? TileGenerator.Generate(ref rng, state.Unlocked, turn + 2, questTerrains, state.Theme)
-            : null;
+        state.NextTile = state.StackCount > 0 ? DealTile(state, ref rng, turn + 2, questTerrains) : null;
     }
 }

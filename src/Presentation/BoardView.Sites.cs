@@ -22,6 +22,9 @@ public partial class BoardView
         public float Grow = 1f;
         public float GrowSpeed;
         public float GrowDelay;
+
+        /// <summary>The translucent floor of each plot still waiting for a tile.</summary>
+        public readonly Dictionary<int, MeshInstance3D> Fills = new();
     }
 
     private readonly Dictionary<int, SiteVisual> _sites = new();
@@ -32,15 +35,47 @@ public partial class BoardView
     private Node3D? _ghost;
     private string _ghostKey = "";
 
-    private StandardMaterial3D PlotLineMaterial => _plotLineMaterial ??= Unshaded(new Color(Palette.Gold, 0.95f));
+    private StandardMaterial3D? _fitMaterial;
+    private StandardMaterial3D? _misfitMaterial;
+    private IReadOnlyDictionary<int, bool> _plotFits = new Dictionary<int, bool>();
 
-    private StandardMaterial3D PlotFillMaterial => _plotFillMaterial ??= new StandardMaterial3D
+    /// <summary>Rings and stakes: opaque and vertex-coloured, so they read clearly over land and sea alike.</summary>
+    private StandardMaterial3D PlotLineMaterial => _plotLineMaterial ??= new StandardMaterial3D
     {
         ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
         VertexColorUseAsAlbedo = true,
         CullMode = BaseMaterial3D.CullModeEnum.Disabled
     };
+
+    private static StandardMaterial3D FillMaterial(Color color) => new()
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        AlbedoColor = color,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        RenderPriority = 4
+    };
+
+    private StandardMaterial3D PlotFillMaterial => _plotFillMaterial ??= FillMaterial(new Color(1f, 0.9f, 0.55f, 0.28f));
+    private StandardMaterial3D FitMaterial => _fitMaterial ??= FillMaterial(new Color(0.38f, 0.92f, 0.52f, 0.45f));
+    private StandardMaterial3D MisfitMaterial => _misfitMaterial ??= FillMaterial(new Color(0.6f, 0.6f, 0.6f, 0.12f));
+
+    /// <summary>
+    /// Tints every waiting plot by whether the tile in hand suits it: green where it would fit, faded where it
+    /// would not. Pass an empty map to clear.
+    /// </summary>
+    public void SetPlotFit(IReadOnlyDictionary<int, bool> fits)
+    {
+        _plotFits = fits;
+        foreach (var visual in _sites.Values)
+        {
+            foreach (var (slot, fill) in visual.Fills)
+                fill.MaterialOverride = FillFor(slot);
+        }
+    }
+
+    private StandardMaterial3D FillFor(int slot) =>
+        _plotFits.TryGetValue(slot, out var fits) ? (fits ? FitMaterial : MisfitMaterial) : PlotFillMaterial;
 
     /// <summary>Ground height at a world point, from whichever tile is there (or just below sea level if none).</summary>
     public float WorldHeight(float x, float z)
@@ -84,6 +119,7 @@ public partial class BoardView
                 child.QueueFree();
             visual.Growing.Clear();
             visual.Parts.Clear();
+            visual.Fills.Clear();
 
             if (site.Built)
             {
@@ -183,10 +219,12 @@ public partial class BoardView
         foreach (var plot in progress.Plots)
         {
             var centre = HexLayout.SlotToWorld(plot.Slot);
-            visual.Root.AddChild(PlotOutline(centre, plot.Filled, plot.Filled ? Palette.Gold : new Color("ffe8a6")));
+            visual.Root.AddChild(PlotOutline(centre, plot.Filled, Palette.Gold));
             if (!plot.Filled)
             {
-                visual.Root.AddChild(PlotFill(centre, new Color(1f, 0.93f, 0.7f, 0.22f)));
+                var fill = PlotFill(centre, FillFor(plot.Slot));
+                visual.Fills[plot.Slot] = fill;
+                visual.Root.AddChild(fill);
                 continue;
             }
 
@@ -211,10 +249,29 @@ public partial class BoardView
         }
     }
 
-    /// <summary>A golden hex ring hugging the ground of a plot (or floating just above the sea on an empty one).</summary>
+    /// <summary>
+    /// A hex ring hugging the ground of a plot. Empty plots float theirs just above the sea on six survey stakes
+    /// with pennants, so a footprint reaching off the island is plain to see.
+    /// </summary>
     private MeshInstance3D PlotOutline(Vector3 centre, bool onGround, Color color)
     {
         var kit = new MeshKit();
+        if (!onGround)
+        {
+            var post = new Color("8b6a4a");
+            for (var i = 0; i < 6; i++)
+            {
+                var p = centre + HexLayout.Corner(i, 0.9f);
+                kit.Transform = new Transform3D(Basis.Identity, p with { Y = -0.35f });
+                kit.Box(new Vector3(0.03f, 0.58f, 0.03f), post);
+                kit.Transform = new Transform3D(new Basis(Vector3.Up, i * Mathf.Pi / 3f), p with { Y = 0.17f });
+                kit.Quad(new Vector3(0, 0, 0), new Vector3(0, 0.07f, 0), new Vector3(0.09f, 0.035f, 0), new Vector3(0.09f, 0.035f, 0), color);
+                kit.Quad(new Vector3(0.09f, 0.035f, 0), new Vector3(0.09f, 0.035f, 0), new Vector3(0, 0.07f, 0), new Vector3(0, 0, 0), color);
+            }
+
+            kit.Transform = Transform3D.Identity;
+        }
+
         const int steps = 5;
         var up = Vector3.Up;
         for (var i = 0; i < 6; i++)
@@ -226,16 +283,16 @@ public partial class BoardView
                     var a = HexLayout.Corner(corner, radius);
                     var b = HexLayout.Corner((corner + 1) % 6, radius);
                     var p = centre + a.Lerp(b, t);
-                    var y = onGround ? Mathf.Max(WorldHeight(p.X, p.Z), TerrainSampler.WaterLevel) + 0.03f : 0.06f;
+                    var y = onGround ? Mathf.Max(WorldHeight(p.X, p.Z), TerrainSampler.WaterLevel) + 0.03f : 0.1f;
                     return p with { Y = y };
                 }
 
                 var t0 = s / (float)steps;
                 var t1 = (s + 1) / (float)steps;
-                var o0 = Point(i, t0, 0.93f);
-                var o1 = Point(i, t1, 0.93f);
-                var i0 = Point(i, t0, 0.86f);
-                var i1 = Point(i, t1, 0.86f);
+                var o0 = Point(i, t0, 0.94f);
+                var o1 = Point(i, t1, 0.94f);
+                var i0 = Point(i, t0, 0.85f);
+                var i1 = Point(i, t1, 0.85f);
                 kit.TriangleSmooth(o0, o1, i1, up, up, up, color, color, color);
                 kit.TriangleSmooth(o0, i1, i0, up, up, up, color, color, color);
             }
@@ -244,11 +301,12 @@ public partial class BoardView
         return new MeshInstance3D { Mesh = kit.Commit(withCustom: false), MaterialOverride = PlotLineMaterial, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
     }
 
-    private MeshInstance3D PlotFill(Vector3 centre, Color color)
+    private MeshInstance3D PlotFill(Vector3 centre, Material material)
     {
         var kit = new MeshKit();
         var up = Vector3.Up;
-        var c = centre + new Vector3(0, 0.05f, 0);
+        var color = Colors.White;
+        var c = centre + new Vector3(0, 0.08f, 0);
         for (var i = 0; i < 6; i++)
         {
             var a = c + HexLayout.Corner(i, 0.86f);
@@ -256,7 +314,7 @@ public partial class BoardView
             kit.TriangleSmooth(c, a, b, up, up, up, color, color, color);
         }
 
-        return new MeshInstance3D { Mesh = kit.Commit(withCustom: false), MaterialOverride = PlotFillMaterial, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        return new MeshInstance3D { Mesh = kit.Commit(withCustom: false), MaterialOverride = material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
     }
 
     // ------------------------------------------------------------------ placement ghost
@@ -288,7 +346,7 @@ public partial class BoardView
             var color = blocked ? new Color("ff6a55") : plot.Filled ? new Color("62e887") : new Color("ffd166");
             _ghost.AddChild(PlotOutline(centre, plot.Filled, color));
             if (!plot.Filled || blocked)
-                _ghost.AddChild(PlotFill(centre with { Y = plot.Filled ? 0.12f : 0f }, new Color(color, 0.3f)));
+                _ghost.AddChild(PlotFill(centre with { Y = plot.Filled ? 0.12f : 0f }, FillMaterial(new Color(color, 0.35f))));
         }
     }
 
@@ -347,8 +405,8 @@ public partial class BoardView
             AnimateParts(visual.Parts);
         }
 
-        if (_plotLineMaterial is not null)
-            _plotLineMaterial.AlbedoColor = new Color(Palette.Gold, 0.7f + (0.3f * Mathf.Sin(_time * 3f)));
+        if (_fitMaterial is not null)
+            _fitMaterial.AlbedoColor = new Color(0.38f, 0.92f, 0.52f, 0.32f + (0.2f * Mathf.Sin(_time * 4f)));
     }
 
     /// <summary>World position above a site, for HUD pins.</summary>
