@@ -83,6 +83,7 @@ public partial class Hud : Control
 
         BuildTopBar();
         BuildQuestPanel();
+        BuildLandPanel();
         BuildStack();
         BuildBanner();
         BuildToast();
@@ -191,7 +192,7 @@ public partial class Hud : Control
         AddChild(wrapper);
         _questHeader = UiKit.Text("QUESTS", 14, new Color(Palette.Paper, 0.95f), UiKit.Black, outline: 6, outlineColor: new Color(Palette.Ink, 0.55f));
         wrapper.AddChild(_questHeader);
-        _questList = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        _questList = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, SizeFlagsHorizontal = SizeFlags.ShrinkBegin };
         _questList.AddThemeConstantOverride("separation", 8);
         wrapper.AddChild(_questList);
     }
@@ -286,10 +287,10 @@ public partial class Hud : Control
     private void BuildHintPanel()
     {
         var panel = UiKit.Panel(new Color(Palette.Paper, 0.96f), 18, 20, 14);
-        panel.SetAnchorsPreset(LayoutPreset.CenterRight);
+        panel.SetAnchorsPreset(LayoutPreset.BottomRight);
         panel.GrowHorizontal = GrowDirection.Begin;
-        panel.GrowVertical = GrowDirection.Both;
-        panel.Position = new Vector2(-24, 0);
+        panel.GrowVertical = GrowDirection.Begin;
+        panel.Position = new Vector2(-24, -120);
         panel.CustomMinimumSize = new Vector2(320, 0);
         panel.MouseFilter = MouseFilterEnum.Ignore;
         panel.Modulate = new Color(1, 1, 1, 0);
@@ -461,11 +462,15 @@ public partial class Hud : Control
             col.AddChild(UiKit.Text(isSelected ? $"{def.Name}  ·  placing" : def.Name, 18, Palette.Ink, UiKit.Black));
             var recipe = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
             recipe.AddThemeConstantOverride("separation", 4);
-            foreach (var (terrain, count) in def.Recipe)
+            foreach (var group in def.Cells.GroupBy(c => (c.Terrain, c.Min)))
             {
-                recipe.AddChild(UiKit.Badge(Icon.ForTerrain(terrain), Palette.TerrainSwatch(terrain), 22));
-                recipe.AddChild(UiKit.Text($"×{count}", 15, Palette.InkSoft, UiKit.Black));
+                var need = UiKit.Badge(Icon.ForTerrain(group.Key.Terrain), Palette.TerrainSwatch(group.Key.Terrain), 22);
+                need.TooltipText = $"{group.Count()} tile(s) with {group.Key.Min}+ {Terrains.DisplayName(group.Key.Terrain).ToLowerInvariant()}";
+                recipe.AddChild(need);
+                recipe.AddChild(UiKit.Text($"{group.Count()}×{(group.Key.Min > 1 ? $" {group.Key.Min}+" : "")}", 15, Palette.InkSoft, UiKit.Black));
             }
+
+            recipe.AddChild(UiKit.Text($"  ·  {def.Size} tiles", 13, Palette.InkSoft, UiKit.Bold));
 
             col.AddChild(recipe);
             _wonderCards.AddChild(button);
@@ -480,55 +485,87 @@ public partial class Hud : Control
 
     public Vector2 WonderCardAnchor => _wonderCards.GlobalPosition + new Vector2(125, 38);
 
-    /// <summary>Recipe progress pins over unfinished wonder sites.</summary>
-    public void UpdateWonderPins(IEnumerable<(int Slot, Vector2? Screen, WonderProgress Progress)> pins)
+    private readonly Dictionary<int, Control> _plotPins = new();
+
+    /// <summary>
+    /// Progress pins over unfinished blueprints ("Castle 1/3"), plus a small pin on every empty plot showing which
+    /// tile it needs.
+    /// </summary>
+    public void UpdateWonderPins(IEnumerable<(int Id, Vector2? Screen, WonderProgress Progress)> sites, IEnumerable<(int Slot, Vector2? Screen, WonderCell Rule)> plots)
     {
         var seen = new HashSet<int>();
-        foreach (var (slot, screen, progress) in pins)
+        foreach (var (id, screen, progress) in sites)
         {
-            seen.Add(slot);
-            if (!_wonderPins.TryGetValue(slot, out var pin))
+            seen.Add(id);
+            if (!_wonderPins.TryGetValue(id, out var pin))
             {
                 pin = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
-                pin.AddThemeStyleboxOverride("panel", UiKit.Box(new Color(Palette.Paper, 0.96f), 16, border: Palette.Gold, borderWidth: 3, shadow: 5, padH: 8, padV: 4));
+                pin.AddThemeStyleboxOverride("panel", UiKit.Box(new Color(Palette.Paper, 0.97f), 16, border: Palette.Gold, borderWidth: 3, shadow: 5, padH: 10, padV: 4));
                 var row = new HBoxContainer { Name = "Row", MouseFilter = MouseFilterEnum.Ignore };
-                row.AddThemeConstantOverride("separation", 5);
+                row.AddThemeConstantOverride("separation", 6);
                 pin.AddChild(row);
                 row.AddChild(UiKit.Badge(IconKind.Star, Palette.AccentDeep, 24));
-                foreach (var terrain in progress.Def.Recipe.Keys)
-                {
-                    row.AddChild(UiKit.Badge(Icon.ForTerrain(terrain), Palette.TerrainSwatch(terrain), 22));
-                    var label = UiKit.Text("", 16, Palette.Ink, UiKit.Black);
-                    label.Name = $"T{(int)terrain}";
-                    row.AddChild(label);
-                }
-
-                _wonderPins[slot] = pin;
+                row.AddChild(UiKit.Text(progress.Def.Name, 16, Palette.Ink, UiKit.Black));
+                var count = UiKit.Text("", 16, Palette.AccentDeep, UiKit.Black);
+                count.Name = "Count";
+                row.AddChild(count);
+                _wonderPins[id] = pin;
                 _pinLayer.AddChild(pin);
-                pin.Scale = Vector2.Zero;
-                pin.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out).TweenProperty(pin, "scale", Vector2.One, 0.45);
+                Pop(pin);
             }
 
-            pin.Visible = screen is not null;
-            if (screen is Vector2 s)
-            {
-                pin.Position = s - new Vector2(pin.Size.X / 2f, pin.Size.Y + 8);
-                pin.PivotOffset = new Vector2(pin.Size.X / 2f, pin.Size.Y);
-            }
-
-            foreach (var (terrain, need) in progress.Def.Recipe)
-            {
-                var label = pin.GetNode<Label>($"Row/T{(int)terrain}");
-                var have = Math.Min(progress.Have.GetValueOrDefault(terrain), need);
-                label.Text = $"{have}/{need}";
-                label.LabelSettings.FontColor = have >= need ? Palette.Good.Darkened(0.2f) : Palette.Ink;
-            }
+            Place(pin, screen, 8);
+            pin.GetNode<Label>("Row/Count").Text = $"{progress.Done}/{progress.Plots.Count}";
         }
 
-        foreach (var slot in _wonderPins.Keys.Where(k => !seen.Contains(k)).ToList())
+        Retire(_wonderPins, seen);
+
+        var seenPlots = new HashSet<int>();
+        foreach (var (slot, screen, rule) in plots)
         {
-            var pin = _wonderPins[slot];
-            _wonderPins.Remove(slot);
+            seenPlots.Add(slot);
+            if (!_plotPins.TryGetValue(slot, out var pin))
+            {
+                var color = Palette.TerrainSwatch(rule.Terrain);
+                pin = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
+                pin.AddThemeStyleboxOverride("panel", UiKit.Box(new Color(Palette.Paper, 0.9f), 14, border: Palette.Gold, borderWidth: 2, shadow: 3, padH: 5, padV: 2));
+                var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+                row.AddThemeConstantOverride("separation", 3);
+                pin.AddChild(row);
+                row.AddChild(UiKit.Badge(Icon.ForTerrain(rule.Terrain), color, 20));
+                row.AddChild(UiKit.Text(rule.Min > 1 ? $"{rule.Min}+" : "1+", 14, Palette.Ink, UiKit.Black));
+                _plotPins[slot] = pin;
+                _pinLayer.AddChild(pin);
+                Pop(pin);
+            }
+
+            Place(pin, screen, 0);
+        }
+
+        Retire(_plotPins, seenPlots);
+    }
+
+    private static void Pop(Control pin)
+    {
+        pin.Scale = Vector2.Zero;
+        pin.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out).TweenProperty(pin, "scale", Vector2.One, 0.45);
+    }
+
+    private static void Place(Control pin, Vector2? screen, float lift)
+    {
+        pin.Visible = screen is not null;
+        if (screen is not Vector2 s)
+            return;
+        pin.Position = s - new Vector2(pin.Size.X / 2f, pin.Size.Y + lift);
+        pin.PivotOffset = new Vector2(pin.Size.X / 2f, pin.Size.Y);
+    }
+
+    private static void Retire(Dictionary<int, Control> pins, HashSet<int> keep)
+    {
+        foreach (var key in pins.Keys.Where(k => !keep.Contains(k)).ToList())
+        {
+            var pin = pins[key];
+            pins.Remove(key);
             var tween = pin.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.In);
             tween.TweenProperty(pin, "scale", Vector2.Zero, 0.25);
             tween.TweenCallback(Callable.From(pin.QueueFree));
@@ -759,59 +796,84 @@ public partial class Hud : Control
 
     // ------------------------------------------------------------------ quest card
 
+    /// <summary>
+    /// A quest at a glance: terrain badge, goal, a big live count, a progress bar and the reward as chips. Fixed width
+    /// with a coloured spine on the left so several cards stack into a tidy column.
+    /// </summary>
     private sealed class QuestCard
     {
+        public const float Width = 300f;
         public readonly PanelContainer Root;
-        private readonly Label _title;
         private readonly Label _count;
         private readonly ProgressBar _bar;
-        private readonly Label _reward;
+        private readonly PanelContainer _warning;
         private int _lastSize = -1;
 
         public QuestCard(Quest quest)
         {
             var color = Palette.TerrainSwatch(quest.Terrain);
-            Root = UiKit.Panel(padH: 12, padV: 10, radius: 16, shadow: 5);
-            Root.CustomMinimumSize = new Vector2(272, 0);
-            Root.MouseFilter = MouseFilterEnum.Ignore;
+            Root = new PanelContainer
+            {
+                MouseFilter = MouseFilterEnum.Ignore,
+                CustomMinimumSize = new Vector2(Width, 0),
+                SizeFlagsHorizontal = SizeFlags.ShrinkBegin
+            };
+            var box = UiKit.Box(new Color(Palette.Paper, 0.97f), 14, shadow: 5, padH: 12, padV: 9);
+            box.BorderColor = color;
+            box.BorderWidthLeft = 6;
+            box.ContentMarginLeft = 14;
+            Root.AddThemeStyleboxOverride("panel", box);
+
             var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-            row.AddThemeConstantOverride("separation", 10);
+            row.AddThemeConstantOverride("separation", 12);
             Root.AddChild(row);
-            row.AddChild(UiKit.Badge(Icon.ForTerrain(quest.Terrain), color, 42));
+            row.AddChild(UiKit.Badge(Icon.ForTerrain(quest.Terrain), color, 40));
+
             var col = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-            col.AddThemeConstantOverride("separation", 2);
+            col.AddThemeConstantOverride("separation", 4);
             row.AddChild(col);
+
             var top = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+            top.AddThemeConstantOverride("separation", 6);
             col.AddChild(top);
-            var verb = quest.Kind == QuestKind.Exactly ? "Exactly" : "Grow";
-            _title = UiKit.Text($"{verb} {Terrains.Info(quest.Terrain).QuestNoun}", 17, Palette.Ink, UiKit.Bold);
-            _title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            top.AddChild(_title);
-            _count = UiKit.Text("", 17, Palette.Ink, UiKit.Black, HorizontalAlignment.Right);
+            var noun = Terrains.Info(quest.Terrain).QuestNoun;
+            var title = quest.Kind == QuestKind.Exactly ? $"Exactly {quest.Target} {noun}" : $"Grow {noun} to {quest.Target}";
+            var titleLabel = UiKit.Text(title, 16, Palette.Ink, UiKit.Bold);
+            titleLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            titleLabel.ClipText = true;
+            top.AddChild(titleLabel);
+            _count = UiKit.Text("", 20, color.Darkened(0.25f), UiKit.Black, HorizontalAlignment.Right);
             top.AddChild(_count);
-            _bar = UiKit.Bar(color, 8);
+
+            _bar = UiKit.Bar(color, 9);
             col.AddChild(_bar);
-            _reward = UiKit.Text($"+{quest.RewardPoints} pts  ·  +{quest.RewardTiles} tiles", 13, Palette.InkSoft, UiKit.Bold);
-            col.AddChild(_reward);
+
+            var chips = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+            chips.AddThemeConstantOverride("separation", 5);
+            col.AddChild(chips);
+            chips.AddChild(UiKit.Pill($"+{quest.RewardPoints}", new Color(Palette.Accent, 0.18f), Palette.AccentDeep));
+            chips.AddChild(UiKit.Pill($"+{quest.RewardTiles} tiles", new Color(Palette.Good, 0.2f), Palette.Good.Darkened(0.35f)));
+            _warning = UiKit.Pill("don't overshoot", new Color(Palette.Bad, 0.16f), Palette.Bad.Darkened(0.2f), 12);
+            _warning.Visible = false;
+            chips.AddChild(_warning);
         }
 
         public void Update(QuestStatus status)
         {
             var q = status.Quest;
-            _count.Text = q.Kind == QuestKind.Exactly ? $"{status.CurrentSize} → {q.Target}" : $"{status.CurrentSize}/{q.Target}";
+            _count.Text = $"{status.CurrentSize}/{q.Target}";
             var target = Mathf.Clamp(status.CurrentSize / (float)q.Target, 0f, 1f);
             var tween = _bar.CreateTween().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
             tween.TweenProperty(_bar, "value", target, 0.5);
             if (_lastSize >= 0 && status.CurrentSize != _lastSize)
             {
                 Root.PivotOffset = Root.Size / 2f;
-                Root.Scale = Vector2.One * 1.06f;
+                Root.Scale = Vector2.One * 1.05f;
                 Root.CreateTween().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out).TweenProperty(Root, "scale", Vector2.One, 0.3);
             }
 
             _lastSize = status.CurrentSize;
-            if (q.Kind == QuestKind.Exactly && status.CurrentSize > q.Target - 3)
-                _count.LabelSettings.FontColor = Palette.AccentDeep;
+            _warning.Visible = q.Kind == QuestKind.Exactly && status.CurrentSize > q.Target - 4;
         }
     }
 }

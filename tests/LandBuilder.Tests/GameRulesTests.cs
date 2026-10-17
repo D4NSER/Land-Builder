@@ -194,8 +194,10 @@ public sealed class GameRulesTests
         var completed = Assert.Single(events.OfType<QuestCompletedEvent>());
         Assert.Equal(12, completed.FinalSize);
         Assert.DoesNotContain(next.Quests, q => q.Id == 1);
-        Assert.Equal(score + 10 + 60, next.Score);
-        Assert.Equal(stack - 1 + 4, next.StackCount);
+        // Twelve forest sectors also make a Grove, which pays its own rung on top.
+        var grove = Assert.Single(events.OfType<RegionTierReachedEvent>()).Tier;
+        Assert.Equal(score + 10 + 60 + grove.Points, next.Score);
+        Assert.Equal(stack - 1 + 4 + grove.Tiles, next.StackCount);
         Assert.Equal(1, next.Stats.QuestsCompleted);
     }
 

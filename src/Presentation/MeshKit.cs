@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 
@@ -26,12 +27,17 @@ public sealed class MeshKit
 
     public int VertexCount => _positions.Count;
 
+    /// <summary>When set, geometry whose <see cref="Custom"/> pivot it rejects is dropped (props inside wonder lots).</summary>
+    public Func<Color, bool>? Skip;
+
     /// <summary>
     /// Adds a triangle given counter-clockwise as seen from its front. Godot treats clockwise as front-facing,
     /// so vertices are emitted as a, c, b.
     /// </summary>
     public void Triangle(Vector3 a, Vector3 b, Vector3 c, Color color)
     {
+        if (Skip is not null && Skip(Custom))
+            return;
         if (OrientFrom is Vector3 center)
         {
             var local = (b - a).Cross(c - a);
@@ -53,6 +59,8 @@ public sealed class MeshKit
 
     public void TriangleSmooth(Vector3 a, Vector3 b, Vector3 c, Vector3 na, Vector3 nb, Vector3 nc, Color ca, Color cb, Color cc)
     {
+        if (Skip is not null && Skip(Custom))
+            return;
         var basis = Transform.Basis;
         Add(Transform * a, (basis * na).Normalized(), ca);
         Add(Transform * c, (basis * nc).Normalized(), cc);

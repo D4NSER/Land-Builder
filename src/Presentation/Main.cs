@@ -185,6 +185,10 @@ public partial class Main : Node3D
 
     private Vector2 _mousePos;
     private int _wonderCard = -1;
+    private SitePlan? _sitePlan;
+
+    /// <summary>Debug lab: keeps the camera on one spot instead of the island centre.</summary>
+    private Vector3? _focusOverride;
     private SeasonDirector _seasons = null!;
     private ThemeStyle _style = ThemeStyle.For(WorldTheme.Temperate);
     private WorldTheme? _forcedTheme;
@@ -323,6 +327,8 @@ public partial class Main : Node3D
             _board.AddTileImmediate(slot, placed, pop: true, delay: distance * 0.08f);
         }
 
+        _wonderCard = -1;
+        _board.SyncSites(_session.State, animate: false);
         var state = _session.State;
         _hud.SetScore(state.Score, instant: true);
         _hud.ResetMilestoneBar();
@@ -397,6 +403,8 @@ public partial class Main : Node3D
         UpdateScoreQueue();
         UpdateQuestPins();
 
+        if (_hoverHold > 0f)
+            _hoverHold -= dt;
         if (_hintTimer > 0f)
         {
             _hintTimer -= dt;
@@ -430,7 +438,7 @@ public partial class Main : Node3D
             var st = _session.State;
             _world.DaylightTarget = _attract ? 0.3f : 0.15f + (0.85f * st.Turn / Mathf.Max(1f, st.Turn + st.TilesLeft + 6f));
         }
-        _rig.AutoFocus = IslandCentre();
+        _rig.AutoFocus = _focusOverride ?? IslandCentre();
         _world.SetViewDistance(_rig.Distance, _rig.FrameRadius);
     }
 
@@ -444,7 +452,7 @@ public partial class Main : Node3D
         if (tile is null && wonder is null)
             return;
 
-        _hand = wonder is WonderType w ? _board.CreateDetachedWonderVisual(w) : _board.CreateDetachedVisual(tile!.Value);
+        _hand = wonder is WonderType w ? _board.CreateWonderHand(w) : _board.CreateDetachedVisual(tile!.Value);
         _hand.SetGrow(1f);
         _handRoot.AddChild(_hand.Root);
         _rotation = 0;
@@ -473,6 +481,10 @@ public partial class Main : Node3D
         }
 
         var mouse = _mousePos;
+        if (_hoverHold > 0f && mouse.DistanceTo(_hoverHoldMouse) < 12f)
+            return;
+        _hoverHold = 0f;
+        _hoverHoldMouse = mouse;
         var overUi = GetViewport().GuiGetHoveredControl() is not null;
         if (overUi || _dragging)
         {
@@ -492,10 +504,22 @@ public partial class Main : Node3D
         var hit = origin + (dir * t);
         _cursorWorld = hit;
         var slot = HexLayout.WorldToSlot(hit);
-        SetHover(_session.State.Board.ContainsKey(slot) || !_session.State.CandidateSlots().Contains(slot) ? null : slot);
+        var state = _session.State;
+        if (_wonderCard >= 0)
+        {
+            // Blueprints can be laid over the island or just beyond its shore.
+            var near = state.Board.ContainsKey(slot) || HexGrid.GetNeighborSlots(slot).Any(state.Board.ContainsKey)
+                       || HexGrid.GetNeighborSlots(slot).Any(n => HexGrid.GetNeighborSlots(n).Any(state.Board.ContainsKey));
+            SetHover(near ? slot : null);
+            return;
+        }
+
+        SetHover(state.Board.ContainsKey(slot) || !state.CandidateSlots().Contains(slot) ? null : slot);
     }
 
     private Vector3 _cursorWorld;
+    private float _hoverHold;
+    private Vector2 _hoverHoldMouse;
 
     private void SetHover(int? slot)
     {
@@ -518,12 +542,22 @@ public partial class Main : Node3D
         if (_hoverSlot is not int s)
         {
             _hoverEval = null;
+            _sitePlan = null;
+            _board.ShowBlueprint(null);
             return;
         }
 
-        _hoverEval = _wonderCard >= 0
-            ? GameEngine.EvaluateWonder(_session.State, _wonderCard, s, _rotation)
-            : _session.State.CurrentTile is not null ? GameEngine.Evaluate(_session.State, s, _rotation) : null;
+        if (_wonderCard >= 0)
+        {
+            _hoverEval = null;
+            _sitePlan = GameEngine.PlanWonder(_session.State, _wonderCard, s, _rotation);
+            _board.ShowBlueprint(_attract ? null : _sitePlan);
+            return;
+        }
+
+        _sitePlan = null;
+        _board.ShowBlueprint(null);
+        _hoverEval = _session.State.CurrentTile is not null ? GameEngine.Evaluate(_session.State, s, _rotation) : null;
     }
 
     private void UpdateHand(float dt)
@@ -547,9 +581,13 @@ public partial class Main : Node3D
 
         Vector3 target;
         var scaleTarget = 1f;
-        if (_hoverSlot is int slot)
+        if (_hoverSlot is int slot && _sitePlan is not null)
         {
-            target = HexLayout.SlotToWorld(slot) + new Vector3(0, HoverHeight + (Mathf.Sin((float)_time * 2.6f) * 0.035f), 0);
+            target = WonderLayout.Centroid(_sitePlan.Type, slot, _sitePlan.Rotation) + new Vector3(0, 1.3f + (Mathf.Sin((float)_time * 2.6f) * 0.05f), 0);
+        }
+        else if (_hoverSlot is int hovered)
+        {
+            target = HexLayout.SlotToWorld(hovered) + new Vector3(0, HoverHeight + (Mathf.Sin((float)_time * 2.6f) * 0.035f), 0);
         }
         else if (_mode == Mode.Playing && !_attract && _cursorWorld != Vector3.Zero)
         {
@@ -575,13 +613,20 @@ public partial class Main : Node3D
         _hand.Body.Rotation = new Vector3(0, _handYaw, 0);
         _hand.Root.Scale = Vector3.One * Mathf.Max(0.01f, _handScale.Value);
 
-        if (_hoverEval is { IsValid: true } eval && _hoverSlot is not null && _settings.EdgeHints && !_handHidden && !_attract)
+        if (_sitePlan is { } plan && _hoverSlot is not null && !_handHidden && !_attract)
+        {
+            _board.HideEdgeMarkers();
+            var screen = _rig.Camera.UnprojectPosition(_hand.Root.Position + new Vector3(0, 0.75f, 0));
+            var (text, color) = DescribePlan(plan);
+            _hud.SetHoverInfo(_mode == Mode.Playing ? screen : null, text, color);
+        }
+        else if (_hoverEval is { IsValid: true } eval && _hoverSlot is not null && _settings.EdgeHints && !_handHidden && !_attract)
         {
             _board.ShowEdgeMarkers(_hand.Root.Position + new Vector3(0, 0.12f, 0), eval);
             var screen = _rig.Camera.UnprojectPosition(_hand.Root.Position + new Vector3(0, 0.45f, 0));
             var (text, color) = DescribeEval(eval);
-            if (_wonderCard >= 0 && eval.IsValid)
-                (text, color) = ($"Build site here  ·  +{eval.TotalPoints}", Palette.Gold);
+            if (Wonders.PlotAt(_session.State, eval.Slot) is { } plot)
+                (text, color) = ($"{text}  ·  fills a {Wonders.Info(plot.Site.Type).Name} plot", Palette.Gold);
             _hud.SetHoverInfo(_mode == Mode.Playing && !_attract ? screen : null, text, color);
         }
         else
@@ -589,6 +634,15 @@ public partial class Main : Node3D
             _board.HideEdgeMarkers();
             _hud.SetHoverInfo(null, "", Colors.White);
         }
+    }
+
+    private static (string Text, Color Color) DescribePlan(SitePlan plan)
+    {
+        if (!plan.IsValid)
+            return (GameEngine.RejectionMessage(plan.RejectionReason!.Value), new Color("ffb4a8"));
+        if (plan.CompletesAtOnce)
+            return ("Every plot is ready: builds at once!", Palette.Gold);
+        return ($"{plan.Ready}/{plan.Plots.Count} plots ready  ·  lay the blueprint", Palette.Gold);
     }
 
     private static (string Text, Color Color) DescribeEval(PlacementEvaluation eval)
@@ -647,7 +701,7 @@ public partial class Main : Node3D
             _wonderCard = index;
             SetHand(null, immediate: false, _session.State.WonderCards[index]);
             var def = Wonders.Info(_session.State.WonderCards[index]);
-            _hud.Toast($"Place the {def.Name}: it completes once its neighbours give it {Recipe(def)}.", 3.5f);
+            _hud.Toast($"{def.Name} covers {def.Size} tiles: {PlotNeeds(def)}. Rotate with Q / E, click to lay the blueprint.", 4.5f);
         }
 
         _audio.Play(Sfx.Whoosh, 1.2f, -4f);
@@ -655,13 +709,21 @@ public partial class Main : Node3D
         RefreshHud();
     }
 
-    private static string Recipe(WonderDef def) =>
-        string.Join(" and ", def.Recipe.Select(r => $"{r.Value} {Terrains.DisplayName(r.Key).ToLowerInvariant()} edges"));
+    /// <summary>"3 tiles with 2+ water sides and 1 with 2+ village" for a wonder's plots.</summary>
+    public static string PlotNeeds(WonderDef def) =>
+        string.Join(" and ", def.Cells
+            .GroupBy(c => (c.Terrain, c.Min))
+            .Select(g => $"{g.Count()} {(g.Count() == 1 ? "tile" : "tiles")} with {(g.Key.Min > 1 ? $"{g.Key.Min}+" : "a")} {Terrains.DisplayName(g.Key.Terrain).ToLowerInvariant()} {(g.Key.Min > 1 ? "sides" : "side")}"));
 
     private void Place(int slot, int rotation)
     {
-        var wonderCard = _wonderCard;
-        var eval = wonderCard >= 0 ? GameEngine.EvaluateWonder(_session.State, wonderCard, slot, rotation) : GameEngine.Evaluate(_session.State, slot, rotation);
+        if (_wonderCard >= 0)
+        {
+            LayBlueprint(slot, rotation);
+            return;
+        }
+
+        var eval = GameEngine.Evaluate(_session.State, slot, rotation);
         if (!eval.IsValid)
         {
             _audio.Play(Sfx.Invalid);
@@ -673,8 +735,7 @@ public partial class Main : Node3D
         var before = _session.State;
         var handPosition = _hand?.Root.Position ?? HexLayout.SlotToWorld(slot) + new Vector3(0, HoverHeight, 0);
         var tilt = _hand?.Root.Rotation ?? Vector3.Zero;
-        var events = wonderCard >= 0 ? _session.PlaceWonder(wonderCard, slot, rotation) : _session.Place(slot, rotation);
-        _wonderCard = -1;
+        var events = _session.Place(slot, rotation);
         _sink.Clear();
         var after = _session.State;
         _idleHintTimer = 0f;
@@ -691,6 +752,7 @@ public partial class Main : Node3D
         _handPos.Snap(handPosition);
 
         SetHand(after.CurrentTile, immediate: false);
+        _board.SyncSites(after, animate: true);
         RefreshCandidates();
         RefreshHud();
         _board.RefreshContexts();
@@ -710,6 +772,42 @@ public partial class Main : Node3D
     }
 
     private sealed record PendingFeedback(GameState Before, GameState After, IReadOnlyList<IDomainEvent> Events);
+
+    /// <summary>Lays the held wonder card's blueprint. No tile drops, so feedback plays at once.</summary>
+    private void LayBlueprint(int anchor, int rotation)
+    {
+        var plan = GameEngine.PlanWonder(_session.State, _wonderCard, anchor, rotation);
+        if (!plan.IsValid)
+        {
+            _audio.Play(Sfx.Invalid);
+            _handPos.Velocity += new Vector3(4f, 0, 0);
+            _hud.Toast(GameEngine.RejectionMessage(plan.RejectionReason!.Value), 1.8f);
+            return;
+        }
+
+        var before = _session.State;
+        var events = _session.PlaceWonder(_wonderCard, anchor, rotation);
+        _wonderCard = -1;
+        _sink.Clear();
+        var after = _session.State;
+        _sitePlan = null;
+        _board.ShowBlueprint(null);
+        _hand?.Free();
+        _hand = null;
+        _audio.Play(Sfx.Place, 0.8f);
+        _fx.Burst(FxKind.Dust, WonderLayout.Centroid(plan.Type, anchor, plan.Rotation) + new Vector3(0, 0.1f, 0), 1.4f);
+        if (_settings.ScreenShake && !_attract)
+            _rig.Shake(0.15f);
+
+        _board.SyncSites(after, animate: true);
+        SetHand(after.CurrentTile, immediate: false);
+        RefreshCandidates();
+        RefreshHud();
+        _board.RefreshContexts();
+        PlayFeedback(anchor, new PendingFeedback(before, after, events));
+        if (!_attract)
+            AutoSave();
+    }
 
     private void OnTileLanded(int slot, TileVisual tile)
     {
@@ -909,11 +1007,88 @@ public partial class Main : Node3D
 
                 case WonderPlacedEvent placedWonder when !quiet:
                 {
-                    var def = Wonders.Info(placedWonder.Type);
+                    var def = Wonders.Info(placedWonder.Site.Type);
+                    if (placedWonder.Plan.CompletesAtOnce)
+                        break;
                     After(0.4f, () =>
                     {
                         _audio.Play(Sfx.QuestNew, 0.9f);
-                        _hud.Toast($"{def.Name} site ready. Surround it with {Recipe(def)} to build it.", 3.5f);
+                        _hud.Toast($"{def.Name} blueprint laid. Fill its golden plots: {PlotNeeds(def)}.", 4f);
+                    });
+                    break;
+                }
+
+                case PlotFilledEvent filled when !quiet:
+                {
+                    var plotScreen = _rig.Camera.UnprojectPosition(HexLayout.SlotToWorld(filled.Slot) + new Vector3(0, 0.8f, 0));
+                    var def = Wonders.Info(filled.Site.Type);
+                    After(delay + 0.35f, () =>
+                    {
+                        _audio.Play(Sfx.QuestNew, 1.1f, -4f);
+                        _hud.ShowPopup(plotScreen, $"{def.Name}  {filled.Done}/{filled.Total}", Palette.Gold, 26, delay: 0f);
+                    });
+                    delay += 0.3f;
+                    break;
+                }
+
+                case RegionTierReachedEvent tier:
+                {
+                    running += tier.Tier.Points;
+                    var target = running;
+                    var d = delay + 0.5f;
+                    delay += 1.0f;
+                    var swatch = Palette.TerrainSwatch(tier.Tier.Terrain).Lightened(0.2f);
+                    var tierWorld = HexLayout.SlotToWorld(tier.Anchor.Slot) + new Vector3(0, 0.6f, 0);
+                    if (quiet)
+                    {
+                        _scoreQueue.Add((target, _time));
+                        After(d, () => _board.Celebrate(tier.Slots, tier.Anchor.Slot, swatch));
+                        break;
+                    }
+
+                    var previous = tier.Tier.Level > 1 ? RegionTiers.Get(tier.Tier.Terrain, tier.Tier.Level - 1).Name : RegionTiers.BaseName(tier.Tier.Terrain);
+                    After(d, () =>
+                    {
+                        var at = _rig.Camera.UnprojectPosition(tierWorld);
+                        _audio.Play(tier.Tier.Level >= 3 ? Sfx.Milestone : Sfx.QuestDone, 1f + (tier.Tier.Level * 0.04f));
+                        var tiles = tier.Tier.Tiles > 0 ? $"  ·  +{tier.Tier.Tiles} {(tier.Tier.Tiles == 1 ? "tile" : "tiles")}" : "";
+                        // First rungs come often: a popup over the region. Bigger ones earn the full banner.
+                        if (tier.Tier.Level >= 2)
+                            _hud.Banner($"{tier.Tier.Name}!", $"{previous} grew into a {tier.Tier.Name}  ·  +{tier.Tier.Points}{tiles}", swatch, 1.2f);
+                        else
+                            _hud.ShowPopup(at + new Vector2(0, -40), $"{tier.Tier.Name}!", swatch, 34, delay: 0f);
+                        _board.Celebrate(tier.Slots, tier.Anchor.Slot, swatch);
+                        _fx.Burst(FxKind.Confetti, tierWorld, 0.8f + (tier.Tier.Level * 0.15f));
+                        _hud.FlyPoints(at, $"+{tier.Tier.Points}", Palette.TerrainSwatch(tier.Tier.Terrain), 0.3f, () => _scoreQueue.Add((target, _time)));
+                        _hud.PulseLand(tier.Tier.Terrain);
+                        if (_settings.ScreenShake)
+                            _rig.Shake(0.15f + (tier.Tier.Level * 0.04f));
+                    });
+                    break;
+                }
+
+                case RegionClosedEvent closed:
+                {
+                    running += closed.Points;
+                    var target = running;
+                    var d = delay + 0.45f;
+                    delay += 0.6f;
+                    var swatch = Palette.TerrainSwatch(closed.Terrain).Lightened(0.25f);
+                    var anchorSlot = closed.Slots.Contains(slot) ? slot : closed.Slots[0];
+                    var closedWorld = (closed.Slots.Aggregate(Vector3.Zero, (acc, s) => acc + HexLayout.SlotToWorld(s)) / closed.Slots.Count) + new Vector3(0, 0.5f, 0);
+                    if (quiet)
+                    {
+                        _scoreQueue.Add((target, _time));
+                        break;
+                    }
+
+                    After(d, () =>
+                    {
+                        var at = _rig.Camera.UnprojectPosition(closedWorld);
+                        _audio.Play(Sfx.Perfect, 1.15f);
+                        _hud.ShowPopup(at + new Vector2(0, -30), $"{closed.Name} completed!", swatch, 30, delay: 0f);
+                        _board.Celebrate(closed.Slots, anchorSlot, swatch);
+                        _hud.FlyPoints(at, $"+{closed.Points}", Palette.TerrainSwatch(closed.Terrain), 0.35f, () => _scoreQueue.Add((target, _time)));
                     });
                     break;
                 }
@@ -922,19 +1097,18 @@ public partial class Main : Node3D
                 {
                     running += done.Points;
                     var target = running;
-                    var wonderWorld = HexLayout.SlotToWorld(done.Slot) + new Vector3(0, 0.6f, 0);
+                    var wonderWorld = WonderLayout.Centroid(done.Site) + new Vector3(0, 0.8f, 0);
                     var d = delay + 0.6f;
                     delay += 1.4f;
                     After(d, () =>
                     {
-                        _board.CompleteWonder(done.Slot);
                         if (quiet)
                         {
                             _scoreQueue.Add((target, _time));
                             return;
                         }
 
-                        var def = Wonders.Info(done.Type);
+                        var def = Wonders.Info(done.Site.Type);
                         _audio.Play(Sfx.Milestone);
                         _hud.Banner($"{def.Name} built!", $"+{done.Points} points  ·  +{done.Tiles} tiles", Palette.Gold, 2f);
                         for (var i = 0; i < 4; i++)
@@ -954,7 +1128,7 @@ public partial class Main : Node3D
                 }
 
                 case TileDiscardedEvent when !quiet:
-                    After(delay + 0.4f, () => _hud.Toast("That river tile had nowhere to connect, so it was set aside.", 2.8f));
+                    After(delay + 0.4f, () => _hud.Toast("That tile fit nowhere (rivers or blueprint plots), so it was set aside.", 2.8f));
                     break;
 
                 case MilestoneReachedEvent milestone when !quiet:
@@ -998,26 +1172,32 @@ public partial class Main : Node3D
         {
             _contextState = state;
             _contextRegions = RegionMap.Build(state.Board);
+            _regionHearts.Clear();
         }
 
         if (!state.Board.TryGetValue(slot, out var tile) || _contextRegions is null)
             return TileContext.Empty;
 
         var villageSize = 0;
+        Region? village = null;
         var forestSize = 0;
         var roads = new List<int>();
         var ridges = new List<int>();
+        var lakes = new List<int>();
         for (var edge = 0; edge < 6; edge++)
         {
             var terrain = tile.EdgeTerrain(edge);
             var region = _contextRegions.RegionAt(new SectorRef(slot, edge));
-            if (terrain == Terrain.Village)
-                villageSize = Math.Max(villageSize, region?.Size ?? 0);
+            if (terrain == Terrain.Village && region is not null && region.Size > villageSize)
+            {
+                villageSize = region.Size;
+                village = region;
+            }
             if (terrain == Terrain.Forest)
                 forestSize = Math.Max(forestSize, region?.Size ?? 0);
 
             var neighborSlot = HexGrid.NeighborSlot(slot, edge);
-            if (!state.Board.TryGetValue(neighborSlot, out var neighbor) || neighbor.Wonder is not null)
+            if (!state.Board.TryGetValue(neighborSlot, out var neighbor))
                 continue;
             var theirs = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
             var local = GameEngine.NormalizeRotation(edge - rotation);
@@ -1025,13 +1205,58 @@ public partial class Main : Node3D
                 roads.Add(local);
             if (terrain == Terrain.Mountain && theirs == Terrain.Mountain && slot < neighborSlot)
                 ridges.Add(local);
+            if (terrain == Terrain.Water && theirs is Terrain.Water or Terrain.River)
+                lakes.Add(local);
         }
 
-        var villageTier = villageSize >= 18 ? 2 : villageSize >= 8 ? 1 : 0;
+        var villageTier = RegionTiers.Level(Terrain.Village, villageSize);
         var forestTier = forestSize >= 36 ? 2 : forestSize >= 16 ? 1 : 0;
         roads.Sort();
         ridges.Sort();
-        return new TileContext(villageTier, roads, ridges, forestTier);
+        lakes.Sort();
+        return new TileContext(villageTier, roads, ridges, forestTier)
+        {
+            LakeEdges = lakes,
+            Zones = ZonesNear(state, slot),
+            Downtown = village is null ? 0f : Downtown(village, slot)
+        };
+    }
+
+    private readonly Dictionary<int, (Vector3 Centre, float Radius, int Heart)> _regionHearts = new();
+
+    /// <summary>1 on the settlement's most central tile, falling to 0 at its outskirts.</summary>
+    private float Downtown(Region region, int slot)
+    {
+        if (!_regionHearts.TryGetValue(region.Id, out var heart))
+        {
+            var slots = region.Sectors.Select(s => s.Slot).Distinct().ToList();
+            var centre = slots.Aggregate(Vector3.Zero, (acc, s) => acc + HexLayout.SlotToWorld(s)) / slots.Count;
+            var nearest = slots.OrderBy(s => HexLayout.SlotToWorld(s).DistanceSquaredTo(centre)).ThenBy(s => s).First();
+            var radius = slots.Max(s => HexLayout.SlotToWorld(s).DistanceTo(centre));
+            heart = (centre, Mathf.Max(radius, 0.5f), nearest);
+            _regionHearts[region.Id] = heart;
+        }
+
+        if (slot == heart.Heart)
+            return 1f;
+        return Mathf.Clamp(1f - (HexLayout.SlotToWorld(slot).DistanceTo(heart.Centre) / (heart.Radius + 0.5f)), 0f, 0.9f);
+    }
+
+    /// <summary>Wonder lots, basins and scaffolding clearings that reach onto a slot.</summary>
+    private static List<Zone> ZonesNear(GameState state, int slot)
+    {
+        var zones = new List<Zone>();
+        var centre = HexLayout.SlotToWorld(slot);
+        foreach (var site in state.Sites)
+        {
+            var footprint = Wonders.Footprint(site);
+            if (!footprint.Any(s => s == slot || HexGrid.GetNeighborSlots(s).Contains(slot)))
+                continue;
+            var filled = footprint.Where(state.Board.ContainsKey).ToList();
+            zones.AddRange(WonderLayout.Zones(site, filled).Where(z => new Vector2(z.X - centre.X, z.Z - centre.Z).Length() < z.Radius + HexLayout.Radius));
+        }
+
+        return zones;
     }
 
     private static List<int> RegionSlots(GameState state, SectorRef anchor)
@@ -1152,8 +1377,9 @@ public partial class Main : Node3D
 
         var state = _session.State;
         _wonderCard = -1;
-        foreach (var (wonderSlot, placedTile) in state.Board.Where(kv => kv.Value.Wonder is not null))
-            _board.SyncWonder(wonderSlot, placedTile.Built);
+        _board.SyncSites(state, animate: false);
+        _sitePlan = null;
+        _board.ShowBlueprint(null);
         _gameOverDelay = -1f;
         _scoreQueue.Clear();
         _shownScore = state.Score;
@@ -1173,6 +1399,19 @@ public partial class Main : Node3D
     {
         if (_mode != Mode.Playing || _attract || _hand is null)
             return;
+        if (_wonderCard >= 0)
+        {
+            if (GameEngine.FindBestSite(_session.State, _wonderCard) is not { } plan)
+                return;
+            while (_rotation != plan.Rotation)
+                Rotate(+1);
+            _hoverHold = 3f;
+            SetHover(plan.Anchor);
+            _audio.Play(Sfx.QuestNew, 1.2f);
+            _hud.Toast("Here: green plots already have the right tiles. Click to lay it.", 2.6f);
+            return;
+        }
+
         var best = GameEngine.FindBestPlacement(_session.State);
         if (best is null)
             return;
@@ -1207,15 +1446,14 @@ public partial class Main : Node3D
         _botTimer -= dt;
         if (_botPlan is null && _botTimer <= 0f && _session.State.WonderCards.Count > 0 && _wonderCard < 0)
         {
-            var wonderPlan = GameEngine.FindBestWonderPlacement(_session.State, 0);
-            if (wonderPlan is not null)
+            var sitePlan = GameEngine.FindBestSite(_session.State, 0);
+            if (sitePlan is not null)
             {
                 _wonderCard = 0;
-                _rotation = wonderPlan.Rotation;
-                _rotationTurns = wonderPlan.Rotation;
+                _rotation = sitePlan.Rotation;
+                _rotationTurns = sitePlan.Rotation;
                 SetHand(null, immediate: true, _session.State.WonderCards[0]);
-                _hoverSlot = wonderPlan.Slot;
-                Place(wonderPlan.Slot, wonderPlan.Rotation);
+                LayBlueprint(sitePlan.Anchor, sitePlan.Rotation);
                 _hoverSlot = null;
                 _botTimer = _autoplay ? 0.5f : 1.0f;
                 return;
@@ -1304,12 +1542,25 @@ public partial class Main : Node3D
         _hud.SetUndo(state.UndosRemaining, _session.CanUndo);
         _hud.SetWonderCards(_attract ? [] : state.WonderCards, _wonderCard);
         _hud.SetQuests(GameEngine.GetQuestStatuses(state));
+        _hud.SetLand(_attract ? [] : LandSummary(state));
         _hud.SetBest(Math.Max(_best, _shownScore));
         if (_shownScore > state.Score || _shownScore == 0)
             _shownScore = state.Score;
         _hud.SetMilestone(_shownScore, MilestoneFloor(_shownScore), MilestoneCeiling(_shownScore), NextUnlockFor(_shownScore), GameRules.MilestoneTileReward);
         _hud.SetControlsHintVisible(state.Turn < 6);
     }
+
+    /// <summary>The biggest region of each levelling terrain, best rungs first.</summary>
+    private static List<LandEntry> LandSummary(GameState state) =>
+        RegionMap.Build(state.Board).Regions
+            .Where(r => RegionTiers.HasTiers(r.Terrain) && r.Size >= 3)
+            .GroupBy(r => r.Terrain)
+            .Select(g => g.OrderByDescending(r => r.Size).First())
+            .Select(r => new LandEntry(r.Terrain, r.Size, RegionTiers.Level(r.Terrain, r.Size), RegionTiers.NameFor(r.Terrain, r.Size), RegionTiers.Next(r.Terrain, r.Size), r.IsClosed))
+            .OrderByDescending(e => e.Level)
+            .ThenByDescending(e => e.Size)
+            .Take(4)
+            .ToList();
 
     private void RefreshCandidates()
     {
@@ -1369,17 +1620,18 @@ public partial class Main : Node3D
 
         _hud.UpdateQuestPins(pins);
 
-        var wonderPins = new List<(int, Vector2?, WonderProgress)>();
-        foreach (var (wonderSlot, placed) in _session.State.Board)
+        Vector2? Screen(Vector3 world) => camera.IsPositionBehind(world) ? null : camera.UnprojectPosition(world);
+        var sitePins = new List<(int, Vector2?, WonderProgress)>();
+        var plotPins = new List<(int, Vector2?, WonderCell)>();
+        foreach (var site in _session.State.Sites.Where(s => !s.Built))
         {
-            if (placed.Wonder is null || placed.Built)
-                continue;
-            var world = HexLayout.SlotToWorld(wonderSlot) + new Vector3(0, 1.0f, 0);
-            Vector2? screen = camera.IsPositionBehind(world) ? null : camera.UnprojectPosition(world);
-            wonderPins.Add((wonderSlot, screen, Wonders.Progress(_session.State, wonderSlot)));
+            var progress = Wonders.Progress(_session.State, site);
+            sitePins.Add((site.Id, Screen(BoardView.SitePinPosition(site)), progress));
+            foreach (var plot in progress.Plots.Where(p => !p.Filled))
+                plotPins.Add((plot.Slot, Screen(HexLayout.SlotToWorld(plot.Slot) + new Vector3(0, 0.25f, 0)), plot.Rule));
         }
 
-        _hud.UpdateWonderPins(wonderPins);
+        _hud.UpdateWonderPins(sitePins, plotPins);
     }
 
     private static Vector3 RegionPinPosition(QuestStatus status)

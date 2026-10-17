@@ -1,6 +1,6 @@
 namespace LandBuilder.Domain;
 
-/// <summary>Special landmark tiles. The numeric values are persisted in saves; append, never reorder.</summary>
+/// <summary>Special landmarks. The numeric values are persisted in saves; append, never reorder.</summary>
 public enum WonderType
 {
     Castle = 0,
@@ -10,56 +10,82 @@ public enum WonderType
     Lighthouse = 4,
     RocketPad = 5,
     Observatory = 6,
-    BotanicalPark = 7
+    BotanicalPark = 7,
+    TallShip = 8
 }
 
 /// <summary>
-/// A wonder is placed like a tile (its <see cref="Edges"/> match neighbours as usual) but starts as a construction
-/// site. It completes once the edges of its neighbours facing it satisfy <see cref="Recipe"/>.
+/// One hex of a wonder's footprint. <see cref="Steps"/> walks from the anchor along grid directions (rotated with the
+/// blueprint); the tile there needs at least <see cref="Min"/> sectors of <see cref="Terrain"/>.
+/// </summary>
+public sealed record WonderCell(int[] Steps, Terrain Terrain, int Min);
+
+/// <summary>
+/// A wonder covers several hexes. Its card lays down a blueprint; every plot then needs a tile that suits it (the
+/// ship's plots each need some water, the castle's need town and mountain...). Plots may also be laid over tiles that
+/// already suit them, so a well-built island can raise a wonder at once.
 /// </summary>
 public sealed record WonderDef(
     WonderType Type,
     string Name,
     string Blurb,
-    TileSpec Edges,
-    IReadOnlyDictionary<Terrain, int> Recipe,
+    IReadOnlyList<WonderCell> Cells,
     int RewardPoints,
-    int RewardTiles);
+    int RewardTiles)
+{
+    public int Size => Cells.Count;
+}
 
-public sealed record WonderProgress(WonderDef Def, IReadOnlyDictionary<Terrain, int> Have, bool Complete);
+/// <summary>A blueprint on the board. Its plots are <see cref="Wonders.Footprint"/>.</summary>
+public sealed record WonderSite(int Id, WonderType Type, int Anchor, int Rotation, int Turn, bool Built = false);
+
+public sealed record PlotStatus(int Slot, WonderCell Rule, bool Filled, bool Suits);
+
+public sealed record WonderProgress(WonderDef Def, WonderSite Site, IReadOnlyList<PlotStatus> Plots)
+{
+    public int Done => Plots.Count(p => p.Filled && p.Suits);
+    public bool Complete => Plots.All(p => p.Filled && p.Suits);
+}
+
+/// <summary>Whether a blueprint can go down at a spot, plot by plot.</summary>
+public sealed record SitePlan(
+    WonderType Type,
+    int Anchor,
+    int Rotation,
+    bool IsValid,
+    PlacementRejectionReason? RejectionReason,
+    IReadOnlyList<PlotStatus> Plots)
+{
+    public int Ready => Plots.Count(p => p.Filled && p.Suits);
+    public bool CompletesAtOnce => IsValid && Plots.All(p => p.Filled && p.Suits);
+}
 
 public static class Wonders
 {
     public const int MaxCards = 2;
 
-    private static TileSpec E(Terrain a, Terrain b, Terrain c, Terrain d, Terrain e, Terrain f) => new(a, b, c, d, e, f);
+    private static WonderCell C(Terrain terrain, int min, params int[] steps) => new(steps, terrain, min);
 
     private static readonly Dictionary<WonderType, WonderDef> Defs = new()
     {
-        [WonderType.Castle] = new(WonderType.Castle, "Castle", "A walled keep that crowns a town under the mountains",
-            E(Terrain.Village, Terrain.Village, Terrain.Village, Terrain.Village, Terrain.Mountain, Terrain.Mountain),
-            new Dictionary<Terrain, int> { [Terrain.Village] = 3, [Terrain.Mountain] = 1 }, 400, 6),
+        [WonderType.Castle] = new(WonderType.Castle, "Castle", "A walled keep crowning a town beneath the mountains",
+            [C(Terrain.Village, 3), C(Terrain.Village, 2, 0), C(Terrain.Mountain, 2, 1)], 450, 6),
         [WonderType.Cathedral] = new(WonderType.Cathedral, "Cathedral", "Twin spires at the heart of a city",
-            E(Terrain.Village, Terrain.Village, Terrain.Village, Terrain.Village, Terrain.Village, Terrain.Village),
-            new Dictionary<Terrain, int> { [Terrain.Village] = 5 }, 450, 6),
+            [C(Terrain.Village, 3), C(Terrain.Village, 3, 0), C(Terrain.Village, 3, 1)], 480, 6),
         [WonderType.GreatPagoda] = new(WonderType.GreatPagoda, "Great Pagoda", "Seven tiers rising over town and grove",
-            E(Terrain.Village, Terrain.Village, Terrain.Village, Terrain.Forest, Terrain.Forest, Terrain.Forest),
-            new Dictionary<Terrain, int> { [Terrain.Village] = 2, [Terrain.Forest] = 2 }, 380, 6),
-        [WonderType.Harbour] = new(WonderType.Harbour, "Harbour", "Docks, warehouses and a tall ship",
-            E(Terrain.Water, Terrain.Water, Terrain.Water, Terrain.Village, Terrain.Village, Terrain.Village),
-            new Dictionary<Terrain, int> { [Terrain.Water] = 2, [Terrain.Village] = 2 }, 380, 6),
-        [WonderType.Lighthouse] = new(WonderType.Lighthouse, "Lighthouse", "A beacon over the lake shore",
-            E(Terrain.Water, Terrain.Water, Terrain.Water, Terrain.Water, Terrain.Grass, Terrain.Grass),
-            new Dictionary<Terrain, int> { [Terrain.Water] = 3 }, 300, 5),
+            [C(Terrain.Village, 2), C(Terrain.Forest, 2, 0), C(Terrain.Forest, 2, 1)], 420, 6),
+        [WonderType.Harbour] = new(WonderType.Harbour, "Harbour", "Docks, warehouses and cranes on a town's waterfront",
+            [C(Terrain.Village, 2), C(Terrain.Water, 2, 0), C(Terrain.Water, 2, 1), C(Terrain.Village, 2, 0, 1)], 520, 7),
+        [WonderType.Lighthouse] = new(WonderType.Lighthouse, "Lighthouse", "A beacon on a headland between two lakes",
+            [C(Terrain.Grass, 2), C(Terrain.Water, 2, 0), C(Terrain.Water, 2, 3)], 380, 5),
         [WonderType.RocketPad] = new(WonderType.RocketPad, "Rocket Pad", "A launch tower out on the open plains",
-            E(Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Field, Terrain.Field),
-            new Dictionary<Terrain, int> { [Terrain.Grass] = 3, [Terrain.Field] = 2 }, 420, 6),
-        [WonderType.Observatory] = new(WonderType.Observatory, "Observatory", "A white dome among the peaks",
-            E(Terrain.Mountain, Terrain.Mountain, Terrain.Mountain, Terrain.Mountain, Terrain.Forest, Terrain.Forest),
-            new Dictionary<Terrain, int> { [Terrain.Mountain] = 3 }, 360, 5),
+            [C(Terrain.Grass, 3), C(Terrain.Grass, 3, 0), C(Terrain.Field, 2, 1), C(Terrain.Field, 2, 0, 1)], 520, 7),
+        [WonderType.Observatory] = new(WonderType.Observatory, "Observatory", "A white dome high among the peaks",
+            [C(Terrain.Mountain, 3), C(Terrain.Mountain, 3, 0), C(Terrain.Mountain, 3, 1)], 450, 6),
         [WonderType.BotanicalPark] = new(WonderType.BotanicalPark, "Botanical Park", "A glass palm house in landscaped gardens",
-            E(Terrain.Forest, Terrain.Forest, Terrain.Grass, Terrain.Grass, Terrain.Water, Terrain.Water),
-            new Dictionary<Terrain, int> { [Terrain.Forest] = 2, [Terrain.Grass] = 2, [Terrain.Water] = 1 }, 380, 6)
+            [C(Terrain.Grass, 3), C(Terrain.Forest, 2, 0), C(Terrain.Water, 1, 1), C(Terrain.Forest, 2, 0, 1)], 480, 6),
+        [WonderType.TallShip] = new(WonderType.TallShip, "Tall Ship", "A three-masted galleon riding at anchor",
+            [C(Terrain.Water, 1), C(Terrain.Water, 1, 0), C(Terrain.Water, 1, 0, 0), C(Terrain.Water, 1, 1), C(Terrain.Water, 1, 0, 1)], 600, 8)
     };
 
     public static IReadOnlyList<WonderType> All { get; } = Enum.GetValues<WonderType>();
@@ -73,44 +99,120 @@ public static class Wonders
         (_, WonderType.GreatPagoda) => 0.3,
         (WorldTheme.Temperate or WorldTheme.Autumn, WonderType.Cathedral or WonderType.Castle) => 2.5,
         (WorldTheme.Nordic, WonderType.Castle or WonderType.Lighthouse or WonderType.Observatory) => 2.5,
-        (WorldTheme.Tropical, WonderType.Harbour or WonderType.Lighthouse or WonderType.BotanicalPark) => 2.5,
+        (WorldTheme.Tropical, WonderType.Harbour or WonderType.TallShip or WonderType.BotanicalPark) => 2.5,
         (WorldTheme.Savanna, WonderType.RocketPad or WonderType.Observatory) => 2.5,
         _ => 1
     };
 
-    /// <summary>Wonders whose edges and recipe only use terrains already unlocked on this island.</summary>
+    /// <summary>Wonders whose plots only ask for terrains already unlocked on this island.</summary>
     public static IReadOnlyList<WonderType> Available(GameState state) =>
-        All.Where(t =>
-        {
-            var def = Defs[t];
-            return def.Edges.DistinctTerrains.All(state.Unlocked.Contains) && def.Recipe.Keys.All(state.Unlocked.Contains);
-        }).ToArray();
+        All.Where(t => Defs[t].Cells.All(c => state.Unlocked.Contains(c.Terrain))).ToArray();
 
     public static WonderType? Draw(ref Rng rng, GameState state)
     {
         var options = Available(state)
-            .Where(t => !state.WonderCards.Contains(t) && !state.Board.Values.Any(p => p.Wonder == t))
+            .Where(t => !state.WonderCards.Contains(t) && !state.Sites.Any(s => s.Type == t))
             .Select(t => (t, ThemeWeight(state.Theme, t)))
             .Where(o => o.Item2 > 0)
             .ToArray();
         return options.Length == 0 ? null : rng.PickWeighted(options);
     }
 
-    /// <summary>Counts the neighbours' edges that face the wonder, by terrain, and checks the recipe.</summary>
-    public static WonderProgress Progress(GameState state, int slot)
+    /// <summary>The slots a blueprint covers, in the same order as its definition's cells.</summary>
+    public static int[] Footprint(WonderType type, int anchor, int rotation)
     {
-        var placed = state.Board[slot];
-        var def = Defs[placed.Wonder ?? throw new ArgumentException("No wonder in this slot.", nameof(slot))];
-        var have = new Dictionary<Terrain, int>();
-        for (var edge = 0; edge < 6; edge++)
+        var cells = Defs[type].Cells;
+        var result = new int[cells.Count];
+        var origin = HexGrid.Decode(anchor);
+        for (var i = 0; i < cells.Count; i++)
         {
-            if (!state.Board.TryGetValue(HexGrid.NeighborSlot(slot, edge), out var neighbor))
-                continue;
-            var terrain = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
-            have[terrain] = have.GetValueOrDefault(terrain) + 1;
+            var coord = origin;
+            foreach (var step in cells[i].Steps)
+                coord += HexGrid.Direction(step + rotation);
+            result[i] = HexGrid.Encode(coord);
         }
 
-        var complete = def.Recipe.All(r => have.GetValueOrDefault(r.Key) >= r.Value);
-        return new WonderProgress(def, have, complete);
+        return result;
+    }
+
+    public static int[] Footprint(WonderSite site) => Footprint(site.Type, site.Anchor, site.Rotation);
+
+    /// <summary>Sectors of the rule's terrain on a tile; river channels count as water.</summary>
+    public static int Count(TileSpec tile, Terrain terrain)
+    {
+        var count = 0;
+        for (var i = 0; i < 6; i++)
+        {
+            var t = tile[i];
+            if (t == terrain || (terrain == Terrain.Water && t == Terrain.River))
+                count++;
+        }
+
+        return count;
+    }
+
+    public static bool Suits(WonderCell rule, TileSpec tile) => Count(tile, rule.Terrain) >= rule.Min;
+
+    public static WonderProgress Progress(GameState state, WonderSite site)
+    {
+        var def = Defs[site.Type];
+        var slots = Footprint(site);
+        var plots = new PlotStatus[slots.Length];
+        for (var i = 0; i < slots.Length; i++)
+        {
+            var filled = state.Board.TryGetValue(slots[i], out var placed);
+            plots[i] = new PlotStatus(slots[i], def.Cells[i], filled, filled && Suits(def.Cells[i], placed!.Tile));
+        }
+
+        return new WonderProgress(def, site, plots);
+    }
+
+    /// <summary>The unfinished blueprint plot at <paramref name="slot"/>, if any.</summary>
+    public static (WonderSite Site, WonderCell Rule)? PlotAt(GameState state, int slot)
+    {
+        foreach (var site in state.Sites)
+        {
+            if (site.Built)
+                continue;
+            var slots = Footprint(site);
+            var index = Array.IndexOf(slots, slot);
+            if (index >= 0)
+                return (site, Defs[site.Type].Cells[index]);
+        }
+
+        return null;
+    }
+
+    /// <summary>Every slot claimed by any blueprint or finished wonder.</summary>
+    public static HashSet<int> ClaimedSlots(GameState state) => state.Sites.SelectMany(Footprint).ToHashSet();
+
+    /// <summary>
+    /// Checks a blueprint spot: plots must be free of other wonders, existing tiles under it must already suit their
+    /// plot, and the footprint has to touch (or sit on) the island.
+    /// </summary>
+    public static SitePlan Plan(GameState state, WonderType type, int anchor, int rotation)
+    {
+        rotation = GameEngine.NormalizeRotation(rotation);
+        var def = Defs[type];
+        var slots = Footprint(type, anchor, rotation);
+        var claimed = ClaimedSlots(state);
+        var plots = new PlotStatus[slots.Length];
+        PlacementRejectionReason? reason = null;
+        var touches = false;
+        for (var i = 0; i < slots.Length; i++)
+        {
+            var filled = state.Board.TryGetValue(slots[i], out var placed);
+            var suits = filled && Suits(def.Cells[i], placed!.Tile);
+            plots[i] = new PlotStatus(slots[i], def.Cells[i], filled, suits);
+            if (claimed.Contains(slots[i]))
+                reason ??= PlacementRejectionReason.SiteBlocked;
+            else if (filled && !suits)
+                reason ??= PlacementRejectionReason.SiteBlocked;
+            touches |= filled || HexGrid.GetNeighborSlots(slots[i]).Any(state.Board.ContainsKey);
+        }
+
+        if (!touches)
+            reason ??= PlacementRejectionReason.NotConnected;
+        return new SitePlan(type, anchor, rotation, reason is null, reason, plots);
     }
 }

@@ -28,7 +28,10 @@ public sealed record RunStats(
     int BestStreak,
     int LargestRegion,
     Terrain LargestRegionTerrain,
-    int WondersBuilt = 0)
+    int WondersBuilt = 0,
+    int TiersReached = 0,
+    int RegionsClosed = 0,
+    int BestVillage = 0)
 {
     public static RunStats Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, Terrain.Grass);
 }
@@ -57,6 +60,10 @@ public sealed class GameState
 
     /// <summary>Wonder cards held, placeable at any time without using the stack.</summary>
     public List<WonderType> WonderCards { get; set; } = new();
+
+    /// <summary>Wonder blueprints laid on the island, finished or not.</summary>
+    public List<WonderSite> Sites { get; set; } = new();
+    public int NextSiteId { get; set; } = 1;
 
     public int Turn => Stats.TilesPlaced;
 
@@ -110,7 +117,9 @@ public sealed class GameState
         UndosRemaining = UndosRemaining,
         Stats = Stats,
         IsGameOver = IsGameOver,
-        WonderCards = new List<WonderType>(WonderCards)
+        WonderCards = new List<WonderType>(WonderCards),
+        Sites = new List<WonderSite>(Sites),
+        NextSiteId = NextSiteId
     };
 
     /// <summary>Empty slots touching the island: the only legal placement targets.</summary>
@@ -132,8 +141,9 @@ public sealed class GameState
     /// <summary>Stable fingerprint for determinism checks.</summary>
     public string Fingerprint()
     {
-        var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}:{kv.Value.Wonder}:{kv.Value.Built}"));
+        var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}"));
+        var sites = string.Join(";", Sites.Select(s => $"{s.Id}:{s.Type}:{s.Anchor}:{s.Rotation}:{s.Built}"));
         var quests = string.Join(";", Quests.Select(q => $"{q.Id}:{q.Terrain}:{q.Kind}:{q.Target}"));
-        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}|{string.Join(",", WonderCards)}";
+        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}|{string.Join(",", WonderCards)}|{sites}";
     }
 }

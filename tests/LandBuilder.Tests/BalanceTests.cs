@@ -37,7 +37,7 @@ public sealed class BalanceTests
             scores.Add(state.Score);
             quests.Add(state.Stats.QuestsCompleted);
             milestones.Add(state.MilestonesReached);
-            _output.WriteLine($"seed {seed,2} {state.Theme,-9}: tiles {state.Stats.TilesPlaced,4} score {state.Score,6} quests {state.Stats.QuestsCompleted,3}/{state.Stats.QuestsFailed,-3} perfect {state.Stats.PerfectPlacements,3} flawless {state.Stats.FlawlessPlacements,2} milestones {state.MilestonesReached,2} bestStreak {state.Stats.BestStreak,3} unlocked {string.Join(",", state.Unlocked.Skip(5))}");
+            _output.WriteLine($"seed {seed,2} {state.Theme,-9}: tiles {state.Stats.TilesPlaced,4} score {state.Score,6} quests {state.Stats.QuestsCompleted,3}/{state.Stats.QuestsFailed,-3} perfect {state.Stats.PerfectPlacements,3} flawless {state.Stats.FlawlessPlacements,2} milestones {state.MilestonesReached,2} rungs {state.Stats.TiersReached,3} closed {state.Stats.RegionsClosed,3} town {state.Stats.BestVillage} bestStreak {state.Stats.BestStreak,3} unlocked {string.Join(",", state.Unlocked.Skip(5))}");
         }
 
         var avgLength = lengths.Average();

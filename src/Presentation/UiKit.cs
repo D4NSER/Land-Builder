@@ -217,12 +217,33 @@ public static class UiKit
     /// <summary>Round coloured badge with a vector icon, used for terrain and rule icons.</summary>
     public static PanelContainer Badge(IconKind icon, Color color, int size = 40)
     {
-        var badge = new PanelContainer { CustomMinimumSize = new Vector2(size, size), MouseFilter = Control.MouseFilterEnum.Ignore };
+        // Shrink in both axes so a badge stays round in rows taller or wider than itself.
+        var badge = new PanelContainer
+        {
+            CustomMinimumSize = new Vector2(size, size),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter
+        };
         badge.AddThemeStyleboxOverride("panel", Box(color, size / 2, border: color.Lightened(0.35f), borderWidth: 2));
         var center = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         center.AddChild(new Icon(icon, Colors.White, size * 0.58f));
         badge.AddChild(center);
         return badge;
+    }
+
+    /// <summary>Small rounded label chip, e.g. a reward on a quest card.</summary>
+    public static PanelContainer Pill(string text, Color background, Color foreground, int size = 13)
+    {
+        var pill = new PanelContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter
+        };
+        pill.AddThemeStyleboxOverride("panel", Box(background, 9, padH: 7, padV: 1));
+        pill.AddChild(Text(text, size, foreground, Black, HorizontalAlignment.Center));
+        return pill;
     }
 
     public static Control Spacer(float w = 0, float h = 0) => new Control { CustomMinimumSize = new Vector2(w, h), MouseFilter = Control.MouseFilterEnum.Ignore };

@@ -26,7 +26,7 @@ public partial class Main
         var target = SlotScreen(best.Slot);
         Motion(target);
         await Wait(0.3f);
-        Check(_hoverSlot == best.Slot, $"cursor over a candidate hovers it (hover={_hoverSlot}, want={best.Slot})");
+        Check(_hoverSlot == best.Slot, $"cursor over a candidate hovers it (hover={_hoverSlot}, want={best.Slot}, ui={GetViewport().GuiGetHoveredControl()?.GetPath()})");
         Check(_hoverEval is { IsValid: true }, "hover produces a placement preview");
         await Wait(0.4f);
         Snap("hover");
@@ -133,27 +133,27 @@ public partial class Main
         RefreshHud();
         PressKey(Godot.Key.G);
         await Wait(0.3f);
-        Check(_wonderCard == 0 && _hand?.Wonder == WonderType.Cathedral, "G picks up the wonder card");
+        Check(_wonderCard == 0 && _hand is not null, "G picks up the wonder card");
         PressKey(Godot.Key.Escape);
         await Wait(0.3f);
         Check(_wonderCard == -1 && _mode == Mode.Playing, "Esc puts the wonder card back without pausing");
         PressKey(Godot.Key.G);
         await Wait(0.3f);
-        var wonderPlan = GameEngine.FindBestWonderPlacement(_session.State, 0)!;
+        var wonderPlan = GameEngine.FindBestSite(_session.State, 0)!;
         for (var guard = 0; guard < 6 && _rotation != wonderPlan.Rotation; guard++)
         {
             PressKey(Godot.Key.Q);
             await Wait(0.05f);
         }
 
-        var wonderSpot = SlotScreen(wonderPlan.Slot);
+        var wonderSpot = SlotScreen(wonderPlan.Anchor);
         Motion(wonderSpot);
         await Wait(0.2f);
         Click(wonderSpot, MouseButton.Left);
         await Wait(1.0f);
-        Check(_session.State.Board.TryGetValue(wonderPlan.Slot, out var site) && site.Wonder == WonderType.Cathedral, "clicking places the wonder site");
-        Check(_session.State.WonderCards.Count == 0 && _wonderCard == -1, "placing uses up the card");
-        Check(_board.Tiles.TryGetValue(wonderPlan.Slot, out var siteVisual) && siteVisual.WonderModel is not null, "the site shows a construction model");
+        Check(_session.State.Sites.Count == 1 && _session.State.Sites[0].Type == WonderType.Cathedral, "clicking lays the wonder blueprint");
+        Check(_session.State.WonderCards.Count == 0 && _wonderCard == -1, "laying it uses up the card");
+        Check(_board.SiteCount == 1, "the blueprint shows on the board");
         Snap("wonder_site");
 
         // --- save, back to title, continue

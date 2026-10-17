@@ -449,12 +449,14 @@ public sealed partial class PropBuilder
     private void AddMeadowDetail(Vector3 p, float scale)
     {
         var roll = _rng.Randf();
-        if (roll < 0.42f)
+        if (roll < 0.36f)
             AddFlowers(p, scale);
-        else if (roll < 0.64f)
+        else if (roll < 0.54f)
             AddBush(p, scale, Pick(_style.Leaves).Lightened(0.1f));
-        else if (roll < 0.86f)
+        else if (roll < 0.74f)
             AddMeadowTree(p, scale);
+        else if (roll < 0.9f && _style.Seasons.Snow < 0.5f)
+            AddLivestock(p, scale);
         else
             AddRock(p, scale * 0.7f, Palette.Stone);
     }

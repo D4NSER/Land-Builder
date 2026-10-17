@@ -44,8 +44,10 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
   | Coral Coast | Thatched stilt huts, longhouses, canoes; rainforest | jungle giants, palms, bananas, ferns |
   | Sunlit Plains | Rondavels, kraals, granaries | acacia, baobab |
   | Amber Vale | Rustic farmsteads, red barns, silos | maple, oak, pine |
-- **Wonders:** every second milestone and every third completed quest earns a wonder card: Castle, Cathedral, Great Pagoda, Harbour, Lighthouse, Rocket Pad, Observatory or Botanical Park. The theme favours some of them. Click the card (or press **G**) to pick it up, then place it anywhere. It doesn't use your stack. It starts as a construction site with a working crane. A pin shows its recipe, for example "5 village edges facing it". Once the neighbours supply it, the landmark is built in stages for big points and extra tiles. Rockets launch every half minute, lighthouse beams sweep, and harbour ships bob at anchor.
-- **Growing structures:** villages grow into towns and cities as their region grows. You get taller houses, market squares, lamp-lit streets, and roads that join matched village edges, with bridges over rivers. Mountain ridges continue across matched mountain edges, and big forests get ancient giant trees. Houses are built in place rather than popping in: walls rise, roofs drop on, chimneys smoke, and cherry trees shed petals.
+- **Growing regions:** connected land levels up as it grows, and every rung pays points (and, from the second rung, tiles). A village region becomes a Village, Town, City, Metropolis and finally a Capital; forests go from Grove to Wildwood, lakes from Pond to Sea of Isles, and so on for every terrain except meadow. Merging two regions pays only for the new rungs. The **Your land** panel shows your biggest regions and how far each one is from its next rung.
+- **Completing regions:** fully enclosing a region of six or more wedges pays 5 points per wedge, plus tiles for big ones.
+- **Wonders:** every second milestone and every third completed quest earns a wonder card: Castle, Cathedral, Great Pagoda, Harbour, Lighthouse, Rocket Pad, Observatory, Botanical Park or Tall Ship. The theme favours some of them. Each wonder covers 3 to 5 tiles. Click the card (or press **G**) to pick it up, rotate the blueprint, and lay it over the island or just off its shore. It doesn't use your stack. Every golden plot needs a tile with enough of the right terrain: the Tall Ship's five plots each need a tile with a water side, the Castle's need town and mountain. Plots can go over tiles that already suit them, so a well-built island can raise a wonder at once. Filled plots get scaffolding and cranes. When the last plot is filled, the landmark rises over the whole footprint for big points and extra tiles. Castles get curtain walls and towers across their plots, harbours get piers, the Tall Ship rides in a basin dug for it, rockets launch every half minute and lighthouse beams sweep.
+- **Growing structures:** settlements are built to match their rung. Towns get taller houses, market squares and lamp-lit streets, Cities get apartment blocks, Metropolises get glass towers clustered downtown, and a Capital gets one great spire at its heart. Roads join matched village edges, with bridges over rivers. Meadows get grazing sheep and cows. Lakes rise into sandy shores where they stop and flow on where they meet another lake. Mountain ridges continue across matched mountain edges, and big forests get ancient giant trees. Houses are built in place rather than popping in: walls rise, roofs drop on, chimneys smoke, and cherry trees shed petals.
 - **Seasons:** each milestone turns the season. Spring brings blossom, autumn turns the woods red and gold, and winter lays snow on roofs, trees and ground and freezes the lakes. Islands without winters get a dry or rainy season instead. Weather follows along: petals, pollen and fireflies, falling leaves, snowfall.
 - **Rivers:** unlocked at the second milestone on every island. River edges must meet another river or flow into a lake; a tile that can't legally go anywhere is set aside so you're never stuck.
 - **Perfect / Flawless:** touch 3+ tiles with every edge matching for a *Perfect* (bonus points + 1 tile). Fill a hole with all six edges matching for a *Flawless* (+100, +2 tiles).
@@ -87,7 +89,7 @@ Other debug flags (after `--`):
 - `--title`: shows the attract-mode title screen.
 - `--capture-dir=<dir> --capture-every=<frames>`: saves periodic screenshots and logs FPS.
 - `--zoom-water-at=<frame> --zoom-terrain=<Terrain>`: freezes the bot and zooms in on a terrain.
-- `--lab [--lab-terrains | --lab-showcase | --lab-wonders [--lab-sites]] [--lab-close] [--lab-far] [--theme=<Theme>] [--season=<Season>] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues and reviewing themes and seasons.
+- `--lab [--lab-terrains | --lab-showcase | --lab-lakes | --lab-city [--lab-town] | --lab-wonders [--lab-sites] [--lab-focus=<n>]] [--lab-close] [--lab-far] [--theme=<Theme>] [--season=<Season>] [--lab-hide=water,props,shelf] [--lab-off=ssao,dof,glow,shadows]`: a fixed tile patch for isolating rendering issues and reviewing themes and seasons.
 
 Automated runs write to `user://automation/` and never touch your real save or leaderboard.
 
@@ -99,7 +101,8 @@ src/LandBuilder.Core/          Pure C# rules, no Godot dependency
   Domain/RegionMap.cs          Union-find over tile wedges for connected terrain areas
   Domain/TileGenerator.cs      Contiguous-segment tile generation with terrain affinities and river overlays
   Domain/WorldTheme.cs         Island themes: terrain weights and milestone unlock order
-  Domain/Wonders.cs            Wonder definitions, recipes, awards and progress
+  Domain/Wonders.cs            Wonder footprints, plot rules, blueprint planning and progress
+  Domain/RegionTiers.cs        Region growth ladders (Village → Capital...) and completion rewards
   Application/GameSession.cs   Current run, undo history, event fan-out
   Infrastructure/              Save (schema 5) and leaderboard persistence
 src/Presentation/              Godot layer
@@ -110,7 +113,11 @@ src/Presentation/              Godot layer
   PropBuilder.cs               Trees, houses, windmills, boats... merged per tile
   ThemeStyle.cs                Per-theme palettes, tree species, architecture, sea, sky and seasons
   Seasons.cs                   Season director feeding the season_* global shader parameters
-  WonderModels.cs              Landmark models and construction sites for wonder tiles
+  WonderModels*.cs             Landmarks, scaffolding, the Tall Ship and the surroundings spanning each plot
+  WonderLayout.cs              Where a wonder stands: centre, scale, facing, and the ground it levels or floods
+  BoardView.Sites.cs           Blueprint outlines, plot scaffolding, finished wonders and the placement ghost
+  PropBuilder.City.cs          Apartment blocks, glass towers, the Capital's spire, livestock and fences
+  Hud.Land.cs                  The "Your land" panel
   TileContext.cs               Per-tile neighbourhood (town tier, roads, ridges) for structures that span tiles
   PropBuilder*.cs              Props: core scatter, tree library, architecture sets, nature
   WorldView.cs                 Sky shader, sun and day progression, grading, ocean, seabed, clouds, birds, motes

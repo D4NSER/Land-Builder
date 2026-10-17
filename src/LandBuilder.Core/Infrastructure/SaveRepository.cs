@@ -5,12 +5,12 @@ using LandBuilder.Domain;
 namespace LandBuilder.Infrastructure;
 
 /// <summary>
-/// Persists an in-progress run. Schema 5 is the hex/quest ruleset; older schemas belonged to retired prototypes
-/// and are reported as unsupported rather than half-loaded.
+/// Persists an in-progress run. Schema 6 adds multi-tile wonder blueprints. Schema 5 saves still load (their old
+/// single-tile wonders become plain tiles); older schemas belonged to retired prototypes and are rejected.
 /// </summary>
 public sealed class SaveRepository
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,6 +36,8 @@ public sealed class SaveRepository
             UndosRemaining = state.UndosRemaining,
             IsGameOver = state.IsGameOver,
             WonderCards = state.WonderCards.ToList(),
+            NextSiteId = state.NextSiteId,
+            Sites = state.Sites.Select(s => new SaveSite { Id = s.Id, Type = s.Type, Anchor = s.Anchor, Rotation = s.Rotation, Turn = s.Turn, Built = s.Built }).ToList(),
             Unlocked = state.Unlocked.ToList(),
             Stats = state.Stats,
             Quests = state.Quests.Select(q => new SaveQuest
@@ -55,9 +57,7 @@ public sealed class SaveRepository
                 Slot = kv.Key,
                 Sectors = kv.Value.Tile.ToArray(),
                 Rotation = kv.Value.Rotation,
-                Turn = kv.Value.Turn,
-                Wonder = kv.Value.Wonder,
-                Built = kv.Value.Built
+                Turn = kv.Value.Turn
             }).ToList()
         };
 
@@ -92,7 +92,7 @@ public sealed class SaveRepository
             return false;
         }
 
-        if (payload.SchemaVersion != CurrentSchemaVersion)
+        if (payload.SchemaVersion is not (5 or CurrentSchemaVersion))
         {
             error = $"Unsupported save schema: {payload.SchemaVersion}.";
             return false;
@@ -115,13 +115,15 @@ public sealed class SaveRepository
                 UndosRemaining = payload.UndosRemaining,
                 IsGameOver = payload.IsGameOver,
                 WonderCards = payload.WonderCards ?? new List<WonderType>(),
+                NextSiteId = Math.Max(1, payload.NextSiteId),
+                Sites = (payload.Sites ?? new List<SaveSite>()).Select(s => new WonderSite(s.Id, s.Type, s.Anchor, GameEngine.NormalizeRotation(s.Rotation), s.Turn, s.Built)).ToList(),
                 Unlocked = payload.Unlocked ?? Terrains.Starting.ToList(),
                 Stats = payload.Stats ?? RunStats.Empty,
                 Quests = (payload.Quests ?? new List<SaveQuest>()).Select(q => new Quest(
                     q.Id, q.Terrain, q.Kind, q.Target, new SectorRef(q.AnchorSlot, q.AnchorEdge), q.RewardTiles, q.RewardPoints, q.CreatedTurn)).ToList(),
                 Board = (payload.Board ?? new List<SaveTile>()).ToDictionary(
                     t => t.Slot,
-                    t => new PlacedTile(TileSpec.FromArray(t.Sectors ?? throw new InvalidDataException("Tile without sectors.")), GameEngine.NormalizeRotation(t.Rotation), t.Turn, t.Wonder, t.Built))
+                    t => new PlacedTile(TileSpec.FromArray(t.Sectors ?? throw new InvalidDataException("Tile without sectors.")), GameEngine.NormalizeRotation(t.Rotation), t.Turn))
             };
         }
         catch (Exception ex)
@@ -171,6 +173,8 @@ public sealed class SaveRepository
         public int UndosRemaining { get; set; }
         public bool IsGameOver { get; set; }
         public List<WonderType>? WonderCards { get; set; }
+        public int NextSiteId { get; set; }
+        public List<SaveSite>? Sites { get; set; }
         public List<Terrain>? Unlocked { get; set; }
         public RunStats? Stats { get; set; }
         public List<SaveQuest>? Quests { get; set; }
@@ -196,7 +200,15 @@ public sealed class SaveRepository
         public Terrain[]? Sectors { get; set; }
         public int Rotation { get; set; }
         public int Turn { get; set; }
-        public WonderType? Wonder { get; set; }
+    }
+
+    private sealed class SaveSite
+    {
+        public int Id { get; set; }
+        public WonderType Type { get; set; }
+        public int Anchor { get; set; }
+        public int Rotation { get; set; }
+        public int Turn { get; set; }
         public bool Built { get; set; }
     }
 }

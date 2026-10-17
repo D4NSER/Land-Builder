@@ -74,7 +74,8 @@ public sealed partial class PropBuilder
             var chimney = Local(p, yaw, new Vector3(w * 0.28f, h + 0.03f, d * 0.18f), scale);
             At(chimney, yaw, scale);
             _kit.Box(new Vector3(0.018f, 0.05f, 0.018f), Palette.StoneDark);
-            Chimneys.Add(chimney + new Vector3(0, 0.05f * scale, 0));
+            if (!InZone(chimney.X, chimney.Z))
+                Chimneys.Add(chimney + new Vector3(0, 0.05f * scale, 0));
         }
 
         Door(p, yaw, scale, d);
@@ -88,7 +89,7 @@ public sealed partial class PropBuilder
         var yaw = HouseYaw(p);
         const float w = 0.09f;
         const float d = 0.09f;
-        var h = _rng.RandfRange(0.13f, 0.16f) * (1f + (_context.VillageTier * 0.35f));
+        var h = _rng.RandfRange(0.13f, 0.16f) * (1f + (Mathf.Min(_context.VillageTier, 2) * 0.35f));
         var wall = Wall();
         At(p + new Vector3(0, -0.01f, 0), yaw, scale);
         _kit.Box(new Vector3(w, h + 0.01f, d), wall);
@@ -619,6 +620,8 @@ public sealed partial class PropBuilder
 
     private void AddPart(AnimatedPartKind kind, string name, MeshKit kit, Transform3D transform)
     {
+        if (InZone(transform.Origin.X, transform.Origin.Z))
+            return;
         var node = new Node3D { Name = name };
         node.AddChild(new MeshInstance3D { Mesh = kit.Commit(withCustom: true), CastShadow = GeometryInstance3D.ShadowCastingSetting.On });
         node.Transform = transform;

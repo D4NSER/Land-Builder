@@ -21,25 +21,71 @@ public partial class Main
         var state = GameState.CreateInitial(5, theme);
         state.Board.Clear();
         var origin = HexGrid.OriginSlotIndex;
-        if (args.Contains("--lab-wonders"))
+        if (args.Contains("--lab-lakes"))
         {
-            // All eight wonders, finished (or as sites with --lab-sites), on a meadow.
-            var built = !args.Contains("--lab-sites");
+            // Partial lakes on neighbouring tiles that meet water-to-water: they should read as one lake.
+            static TileSpec T(params Terrain[] t) => TileSpec.FromArray(t);
+            var W = Terrain.Water;
+            var G = Terrain.Grass;
+            var F = Terrain.Forest;
+            state.Board[HexGrid.Encode(new HexCoord(0, 0))] = new PlacedTile(T(W, W, W, G, G, G), 0, 0);
+            state.Board[HexGrid.Encode(new HexCoord(1, 0))] = new PlacedTile(T(G, G, W, W, W, G), 0, 0);
+            state.Board[HexGrid.Encode(new HexCoord(1, -1))] = new PlacedTile(T(G, G, G, W, W, F), 0, 0);
+            state.Board[HexGrid.Encode(new HexCoord(0, -1))] = new PlacedTile(T(F, F, G, G, W, W), 0, 0);
+            state.Board[HexGrid.Encode(new HexCoord(-1, 0))] = new PlacedTile(T(W, G, G, G, F, F), 0, 0);
+            state.Board[HexGrid.Encode(new HexCoord(0, 1))] = new PlacedTile(T(G, W, W, G, G, G), 0, 0);
+            state.Board[HexGrid.Encode(new HexCoord(-1, 1))] = new PlacedTile(T(G, G, G, G, G, G), 0, 0);
+        }
+        else if (args.Contains("--lab-city"))
+        {
+            // A Capital: a two-ring blob of town tiles with meadows and fields around it.
+            var size = args.Contains("--lab-town") ? 1 : 2;
+            var o = HexGrid.Decode(origin);
             for (var q = -4; q <= 4; q++)
             {
-                for (var r = -3; r <= 3; r++)
+                for (var r = -4; r <= 4; r++)
                 {
-                    if (System.Math.Abs(q + r) > 4)
+                    var c = new HexCoord(q, r);
+                    var d = c.DistanceTo(o);
+                    if (d > 3)
+                        continue;
+                    var tile = d <= size ? TileSpec.Pure(Terrain.Village)
+                        : (q + r) % 3 == 0 ? TileSpec.Pure(Terrain.Field)
+                        : TileSpec.Pure(Terrain.Grass);
+                    state.Board[HexGrid.Encode(c)] = new PlacedTile(tile, 0, 0);
+                }
+            }
+        }
+        else if (args.Contains("--lab-wonders"))
+        {
+            // Every wonder on a meadow, finished (or as half-filled blueprints with --lab-sites).
+            var built = !args.Contains("--lab-sites");
+            for (var q = -8; q <= 7; q++)
+            {
+                for (var r = -5; r <= 5; r++)
+                {
+                    if (System.Math.Abs(q + r) > 7)
                         continue;
                     state.Board[HexGrid.Encode(new HexCoord(q, r))] = new PlacedTile(TileSpec.Pure(Terrain.Grass), 0, 0);
                 }
             }
 
-            (int Q, int R)[] spots = [(-3, -1), (-1, -1), (1, -1), (3, -1), (-3, 1), (-1, 1), (1, 1), (3, 1)];
-            for (var i = 0; i < spots.Length; i++)
+            (int Q, int R)[] spots = [(-6, -3), (-2, -3), (2, -3), (-6, 0), (-2, 0), (2, 0), (-5, 3), (-1, 3), (3, 2)];
+            for (var i = 0; i < Wonders.All.Count; i++)
             {
-                var type = (WonderType)i;
-                state.Board[HexGrid.Encode(new HexCoord(spots[i].Q, spots[i].R))] = new PlacedTile(Wonders.Info(type).Edges, 0, 0, type, built);
+                var type = Wonders.All[i];
+                var anchor = HexGrid.Encode(new HexCoord(spots[i].Q, spots[i].R));
+                var plots = Wonders.Footprint(type, anchor, 0);
+                var cells = Wonders.Info(type).Cells;
+                for (var k = 0; k < plots.Length; k++)
+                {
+                    if (!built && k == plots.Length - 1)
+                        state.Board.Remove(plots[k]);
+                    else
+                        state.Board[plots[k]] = new PlacedTile(TileSpec.Pure(cells[k].Terrain), 0, 0);
+                }
+
+                state.Sites.Add(new WonderSite(state.NextSiteId++, type, anchor, 0, 0, built));
             }
         }
         else if (args.Contains("--lab-showcase"))
@@ -116,15 +162,24 @@ public partial class Main
         _board.Clear();
         foreach (var (slot, placed) in state.Board)
             _board.AddTileImmediate(slot, placed, pop: false);
+        _board.SyncSites(state, animate: false);
         _hand?.Free();
         _hand = null;
         _board.SetCandidatesVisible(false);
         var far = args.Contains("--lab-far");
-        var showcase = args.Contains("--lab-showcase") || args.Contains("--lab-wonders");
+        var showcase = args.Contains("--lab-showcase") || args.Contains("--lab-wonders") || args.Contains("--lab-lakes") || args.Contains("--lab-city");
         var close = args.Contains("--lab-close");
         _rig.Reframe(showcase ? new Vector3(0.4f, 0, 0.2f) : new Vector3(0.6f, 0, 0), far ? 7f : close ? 0.2f : showcase ? 2.6f : args.Contains("--lab-terrains") ? 1.8f : 1.0f, instant: true);
         if (close)
             _rig.Zoom(-3f);
+
+        // --lab-focus=N looks closely at the Nth wonder site.
+        if (int.TryParse(args.FirstOrDefault(a => a.StartsWith("--lab-focus="))?.Split('=', 2)[1], out var focus) && focus < state.Sites.Count)
+        {
+            _focusOverride = WonderLayout.Centroid(state.Sites[focus]);
+            _rig.FrameRadius = 1.8f;
+            _rig.Reframe(_focusOverride.Value, 1.8f, instant: true);
+        }
         _rig.ScreenShift = 0f;
 
         var hide = args.FirstOrDefault(a => a.StartsWith("--lab-hide="))?.Split('=', 2)[1] ?? "";

@@ -28,11 +28,16 @@ public sealed class TerrainSampler
     /// <summary>Height of the flattened building lot on wonder tiles.</summary>
     public const float LotHeight = 0.05f;
 
-    private readonly bool _wonderLot;
+    private readonly IReadOnlyList<Zone> _zones;
 
-    public TerrainSampler(TileSpec tile, Transform3D toWorld, ThemeStyle style, bool wonderLot = false)
+    /// <summary>Local edges where this tile's lake continues into a neighbour's; every other edge gets a shore.</summary>
+    private readonly bool[] _openWater = new bool[6];
+
+    public TerrainSampler(TileSpec tile, Transform3D toWorld, ThemeStyle style, IEnumerable<int>? lakeEdges = null, IReadOnlyList<Zone>? zones = null)
     {
-        _wonderLot = wonderLot;
+        _zones = zones ?? [];
+        foreach (var edge in lakeEdges ?? [])
+            _openWater[((edge % 6) + 6) % 6] = true;
         _sectors = tile.ToArray();
         _toWorld = toWorld;
         _style = style;
@@ -223,6 +228,7 @@ public sealed class TerrainSampler
         var n = Noise.Fbm(wx * 1.6f, wz * 1.6f, 3, 3);
         var fine = Noise.Value(wx * 7.0f, wz * 7.0f, 11);
         var landRim = 0.03f + (n * 0.04f);
+        var shore = ShoreInterior(x, z);
 
         var height = 0f;
         var r = 0f;
@@ -232,7 +238,7 @@ public sealed class TerrainSampler
         {
             if (w[i] < 0.0005f)
                 continue;
-            var (h, c) = TerrainHeightColor((Terrain)i, wx, wz, n, fine, interior, edge, landRim);
+            var (h, c) = TerrainHeightColor((Terrain)i, wx, wz, n, fine, i == (int)Terrain.Water ? shore : interior, edge, landRim);
             height += h * w[i];
             r += c.R * w[i];
             g += c.G * w[i];
@@ -243,11 +249,25 @@ public sealed class TerrainSampler
         var water = w[(int)Terrain.Water];
         var swamp = w[(int)Terrain.Swamp];
 
-        if (_wonderLot)
+        foreach (var zone in _zones)
         {
-            // Level a building lot in the middle; lakes stay lakes so harbours keep their water.
-            var lot = Mathf.SmoothStep(0.7f, 0.5f, Mathf.Sqrt((x * x) + (z * z))) * (1f - water);
-            height = Mathf.Lerp(height, LotHeight, lot);
+            if (zone.Kind == ZoneKind.Clear)
+                continue;
+            var d = new Vector2(wx - zone.X, wz - zone.Z).Length();
+            var f = Mathf.SmoothStep(zone.Radius, zone.Radius * 0.72f, d);
+            if (f <= 0f)
+                continue;
+            if (zone.Kind == ZoneKind.Lot)
+            {
+                // Level the wonder's lot; lakes stay lakes so harbours keep their water.
+                height = Mathf.Lerp(height, zone.Height, f * (1f - water));
+            }
+            else
+            {
+                height = Mathf.Lerp(height, WaterRim + (n * 0.03f), f);
+                color = color.Lerp(_style.GroundB(Terrain.Water), f);
+                water = Mathf.Max(water, f);
+            }
         }
 
         var channel = ChannelFactor(x, z);
@@ -263,8 +283,8 @@ public sealed class TerrainSampler
         var wet = Mathf.Max(Mathf.Max(water, channel), Mathf.Max(swamp > 0.2f ? swamp : 0f, paddy > 0.3f && height < WaterLevel + 0.01f ? paddy : 0f));
         if (wet > 0.02f)
         {
-            var shore = 1f - Mathf.Clamp(Mathf.Abs(height - WaterLevel) / 0.05f, 0f, 1f);
-            color = color.Lerp(_style.Shore, shore * 0.7f * (1f - (swamp * 0.8f)));
+            var beach = 1f - Mathf.Clamp(Mathf.Abs(height - WaterLevel) / 0.05f, 0f, 1f);
+            color = color.Lerp(_style.Shore, beach * 0.7f * (1f - (swamp * 0.8f)));
         }
 
         var murk = Mathf.Max(Mathf.Clamp((swamp - water - channel) * 1.4f, 0f, 1f), paddy * 0.55f);
@@ -328,8 +348,10 @@ public sealed class TerrainSampler
             case Terrain.Water:
             {
                 // Purely world-space so lakes spanning several tiles show no trace of the hex grid.
+                // The bed rises into a shore at every edge the lake does not continue across, so a lake never
+                // ends in a cliff against a neighbour (or the island's edge).
                 var bed = WaterRim - 0.02f + (n * 0.04f);
-                return (bed, a.Lerp(b, Mathf.SmoothStep(0.25f, 0.75f, n)));
+                return (Rim(bed, landRim, interior), a.Lerp(b, Mathf.SmoothStep(0.25f, 0.75f, n)));
             }
             case Terrain.Mountain:
             {
@@ -377,6 +399,22 @@ public sealed class TerrainSampler
         var fz = (jz / cell) - Mathf.Floor(jz / cell);
         var d = Mathf.Min(Mathf.Min(fx, 1f - fx), Mathf.Min(fz, 1f - fz)) * cell;
         return 1f - Mathf.SmoothStep(0.016f, 0.03f, d);
+    }
+
+    /// <summary>0 on an edge where the lake must stop, rising to 1 a short way inland from every such edge.</summary>
+    private float ShoreInterior(float x, float z)
+    {
+        var best = float.MaxValue;
+        for (var e = 0; e < 6; e++)
+        {
+            if (_openWater[e])
+                continue;
+            var a = HexLayout.EdgeAngle(e);
+            var along = (x * Mathf.Cos(a)) - (z * Mathf.Sin(a));
+            best = Math.Min(best, HexLayout.InRadius - along);
+        }
+
+        return best == float.MaxValue ? 1f : Mathf.SmoothStep(0f, 0.32f, best);
     }
 
     private static float Rim(float interiorHeight, float rimHeight, float interior) =>

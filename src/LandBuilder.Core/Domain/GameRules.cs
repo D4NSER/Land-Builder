@@ -28,6 +28,10 @@ public static class GameRules
 
     public const int MilestoneTileReward = 4;
 
+    /// <summary>Closing a region (no open edges left) pays per sector once it is at least this big.</summary>
+    public const int MinClosedRegion = 6;
+    public const int PointsPerClosedSector = 5;
+
     /// <summary>Wonder cards come with every second milestone (the 2nd, 4th, ...) and every few quests.</summary>
     public static bool MilestoneAwardsWonder(int index) => index % 2 == 1;
 
@@ -40,7 +44,7 @@ public static class GameRules
     {
         long threshold = 0;
         for (var i = 0; i <= index; i++)
-            threshold += 300 + (i * 175);
+            threshold += 300 + (i * 200);
         return threshold;
     }
 

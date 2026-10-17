@@ -6,12 +6,12 @@ using LandBuilder.Domain;
 namespace LandBuilder.Presentation;
 
 /// <summary>
-/// Builds the big landmark models for wonder tiles, plus the construction site shown until a wonder's recipe is met.
-/// Models are laid out in the tile's unrotated frame, so they line up with the wonder's terrain sectors
-/// (e.g. the Harbour's docks reach into its lake sectors). Pop-in delays are staged bottom-up, so completing a
-/// wonder plays as a little construction sequence.
+/// Builds the big landmark models for wonders, the scaffolding shown on blueprint plots while they are filled, and
+/// the surroundings that tie a finished wonder's plots together. Landmarks are authored at tile size and scaled up
+/// over the footprint by <see cref="WonderLayout"/>. Pop-in delays are staged bottom-up, so completing a wonder plays
+/// as a little construction sequence.
 /// </summary>
-public sealed class WonderModelBuilder
+public sealed partial class WonderModelBuilder
 {
     private static readonly Color Stone = new("c9c2b4");
     private static readonly Color StoneDark = new("9c958a");
@@ -25,9 +25,12 @@ public sealed class WonderModelBuilder
     private readonly Node3D _partsRoot;
     private readonly List<AnimatedPart> _parts = new();
     private readonly RandomNumberGenerator _rng = new();
+    private readonly float _water;
 
-    public WonderModelBuilder(Func<float, float, float> ground, ThemeStyle style, Node3D partsRoot, int seed)
+    /// <param name="waterLevel">The lake surface in this builder's (possibly scaled) frame.</param>
+    public WonderModelBuilder(Func<float, float, float> ground, ThemeStyle style, Node3D partsRoot, int seed, float waterLevel = TerrainSampler.WaterLevel)
     {
+        _water = waterLevel;
         _ground = ground;
         _style = style;
         _partsRoot = partsRoot;
@@ -36,14 +39,16 @@ public sealed class WonderModelBuilder
 
     public IReadOnlyList<AnimatedPart> Parts => _parts;
 
-    public ArrayMesh Build(WonderType type, bool complete)
+    /// <summary>Scaffolding, a half-built core and a crane: one plot of a blueprint that has its tile.</summary>
+    public ArrayMesh BuildScaffold(WonderType type)
     {
-        if (!complete)
-        {
-            BuildSite(type);
-            return _kit.Commit(withCustom: true);
-        }
+        BuildSite(type);
+        return _kit.Commit(withCustom: true);
+    }
 
+    /// <summary>The finished landmark at the centre of the footprint.</summary>
+    public ArrayMesh Build(WonderType type)
+    {
         switch (type)
         {
             case WonderType.Castle:
@@ -69,6 +74,9 @@ public sealed class WonderModelBuilder
                 break;
             case WonderType.BotanicalPark:
                 BuildBotanicalPark();
+                break;
+            case WonderType.TallShip:
+                BuildGalleon();
                 break;
         }
 
@@ -461,7 +469,7 @@ public sealed class WonderModelBuilder
         }
 
         // Wooden piers on piles.
-        var deck = TerrainSampler.WaterLevel + 0.03f;
+        var deck = _water + 0.03f;
         foreach (var angle in new[] { 20f, 60f, 100f })
         {
             var d = Dir(angle);
@@ -521,7 +529,7 @@ public sealed class WonderModelBuilder
             }
         }
 
-        var shipPos = (Dir(60) * 0.5f) with { Y = TerrainSampler.WaterLevel + 0.005f };
+        var shipPos = (Dir(60) * 0.5f) with { Y = _water + 0.005f };
         AddPart(AnimatedPartKind.Boat, "Ship", ship, new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(60) + (Mathf.Pi / 2f)), shipPos));
     }
 

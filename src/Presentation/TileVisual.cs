@@ -11,16 +11,12 @@ public sealed class TileVisual
     public required Node3D Body { get; init; }
     public required MeshInstance3D Ground { get; init; }
     public MeshInstance3D? Props { get; init; }
-    public MeshInstance3D? Water { get; init; }
-    public MeshInstance3D? WonderModel { get; set; }
-    public List<AnimatedPart> WonderParts { get; } = new();
-    public LandBuilder.Domain.WonderType? Wonder { get; init; }
-    public bool WonderBuilt { get; set; }
-    public float WonderGrow = 1f;
-    public float WonderGrowSpeed;
-    public System.Func<float, float, float>? GroundHeight { get; init; }
+    public MeshInstance3D? Water { get; set; }
+    public System.Func<float, float, float>? GroundHeight { get; set; }
     public string ContextKey { get; set; } = "";
-    public TerrainSampler? Sampler { get; init; }
+    public TerrainSampler? Sampler { get; set; }
+    public string TerrainKey { get; set; } = "";
+    public bool WorldWater { get; init; }
     public int Seed { get; init; }
     public List<Node3D> AmbientFx { get; } = new();
     public GpuParticles3D? Petals { get; set; }
@@ -47,8 +43,6 @@ public sealed class TileVisual
     {
         Grow = value;
         Props?.SetInstanceShaderParameter("grow", value);
-        if (WonderGrowSpeed <= 0f)
-            WonderModel?.SetInstanceShaderParameter("grow", value);
         foreach (var part in Parts)
         {
             if (part.Node.GetChildCount() > 0 && part.Node.GetChild(0) is GeometryInstance3D g)

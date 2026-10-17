@@ -16,7 +16,13 @@ public enum PlacementRejectionReason
     SlotOccupied = 2,
     NotConnected = 3,
     RiverBlocked = 4,
-    NoWonderCard = 5
+    NoWonderCard = 5,
+
+    /// <summary>A blueprint plot is taken by another wonder or by a tile that does not suit it.</summary>
+    SiteBlocked = 6,
+
+    /// <summary>The tile does not have what this blueprint plot needs.</summary>
+    WrongTileForPlot = 7
 }
 
 /// <summary>Full breakdown of what a placement is worth. Also used for hover previews before committing.</summary>
@@ -73,9 +79,18 @@ public sealed record TileDiscardedEvent(TileSpec Tile) : IDomainEvent;
 
 public sealed record WonderAwardedEvent(WonderType Type, string Reason) : IDomainEvent;
 
-public sealed record WonderPlacedEvent(int Slot, WonderType Type, PlacementEvaluation Evaluation) : IDomainEvent;
+public sealed record WonderPlacedEvent(WonderSite Site, SitePlan Plan) : IDomainEvent;
 
-public sealed record WonderCompletedEvent(int Slot, WonderType Type, int Points, int Tiles) : IDomainEvent;
+/// <summary>A tile went into one of a blueprint's plots.</summary>
+public sealed record PlotFilledEvent(WonderSite Site, int Slot, int Done, int Total) : IDomainEvent;
+
+public sealed record WonderCompletedEvent(WonderSite Site, int Points, int Tiles) : IDomainEvent;
+
+/// <summary>A connected region climbed a rung of its ladder (a village became a Town...).</summary>
+public sealed record RegionTierReachedEvent(RegionTier Tier, int Size, IReadOnlyList<int> Slots, SectorRef Anchor) : IDomainEvent;
+
+/// <summary>A region was fully enclosed and can no longer grow.</summary>
+public sealed record RegionClosedEvent(Terrain Terrain, int Size, string Name, int Points, int Tiles, IReadOnlyList<int> Slots) : IDomainEvent;
 
 public sealed record GameOverEvent(long FinalScore, RunStats Stats) : IDomainEvent;
 

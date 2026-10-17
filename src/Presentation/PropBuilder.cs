@@ -14,7 +14,10 @@ public enum AnimatedPartKind
     Crane,
     Beam,
     Rocket,
-    Static
+    Static,
+
+    /// <summary>Rides the swell in place: bobs and rolls, never drifts.</summary>
+    Ship
 }
 
 public sealed record AnimatedPart(AnimatedPartKind Kind, Node3D Node, float Phase, Vector3 BasePosition);
@@ -39,12 +42,12 @@ public sealed partial class PropBuilder
     private readonly RandomNumberGenerator _rng = new();
 
     private readonly TileContext _context;
-    private readonly float _clearRadius;
 
-    public PropBuilder(TerrainSampler sampler, TileSpec tile, int seed, Node3D partsRoot, TileContext? context = null, float clearRadius = 0f)
+    public PropBuilder(TerrainSampler sampler, TileSpec tile, int seed, Node3D partsRoot, TileContext? context = null)
     {
         _context = context ?? TileContext.Empty;
-        _clearRadius = clearRadius;
+        if (_context.Zones.Count > 0)
+            _kit.Skip = pivot => InZone(pivot.R, pivot.B);
         _sampler = sampler;
         _style = sampler.Style;
         _tile = tile;
@@ -63,12 +66,6 @@ public sealed partial class PropBuilder
     public ArrayMesh? Build()
     {
         _rng.Seed = (ulong)(uint)_seed * 2654435761UL + 17UL;
-        if (_clearRadius > 0f)
-        {
-            // Wonder lots keep their centre clear; only the fringe gets grass and pebbles.
-            AddGroundDetail();
-            return _kit.IsEmpty ? null : _kit.Commit(withCustom: true);
-        }
 
         var counts = Enumerable.Range(0, 6).Select(_sampler.PropTerrain).GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
         int Count(Terrain t) => counts.GetValueOrDefault(t);
@@ -96,6 +93,7 @@ public sealed partial class PropBuilder
         // Structures shared with neighbours come first so the scatter keeps clear of them.
         BuildRoads();
         BuildRidges();
+        BuildSkyline(Count(Terrain.Village));
         if (_context.VillageTier >= 1 && Count(Terrain.Village) >= 2 && _rng.Randf() < 0.5f + (_context.VillageTier * 0.2f))
             TryLandmark(Terrain.Village, (p, s) => AddMarket(p, s * BuildingScale), 0.12f);
         if (_context.ForestTier >= 1 && Count(Terrain.Forest) >= 2)
@@ -122,13 +120,14 @@ public sealed partial class PropBuilder
                     Scatter(sector, terrain, Mathf.RoundToInt(N(2, 4) * dense), 0.05f, AddUndergrowth);
                     break;
                 case Terrain.Grass:
-                    Scatter(sector, terrain, N(3, 6), 0.06f, AddMeadowDetail);
+                    Scatter(sector, terrain, N(4, 7), 0.06f, AddMeadowDetail);
                     break;
                 case Terrain.Field when !_style.RicePaddies:
                     Scatter(sector, terrain, N(1, 3), 0.1f, AddFieldDetail);
                     break;
                 case Terrain.Village:
-                    Scatter(sector, terrain, N(2, 4) + _context.VillageTier, 0.17f - (_context.VillageTier * 0.015f), (p, s) => AddHouse(p, s * BuildingScale));
+                    var tier = Mathf.Min(_context.VillageTier, 4);
+                    Scatter(sector, terrain, N(2, 4) + tier, 0.17f - (tier * 0.015f), (p, s) => AddCityHouse(p, s));
                     Scatter(sector, terrain, N(1, 3), 0.06f, AddVillageGreen);
                     break;
                 case Terrain.Water:
@@ -234,6 +233,21 @@ public sealed partial class PropBuilder
     }
 
     /// <summary>Sets the pop-in pivot and delay. Props near the centre appear first, rippling outward.</summary>
+    /// <summary>Whether a tile-local point lies inside a wonder's lot, where nothing else may stand.</summary>
+    public bool InZone(float x, float z)
+    {
+        if (_context.Zones.Count == 0)
+            return false;
+        var world = _sampler.ToWorld(x, 0, z);
+        foreach (var zone in _context.Zones)
+        {
+            if (new Vector2(world.X - zone.X, world.Z - zone.Z).Length() < zone.Radius * 0.9f)
+                return true;
+        }
+
+        return false;
+    }
+
     private void Begin(Vector3 pivot)
     {
         var dist = new Vector2(pivot.X, pivot.Z).Length();
@@ -379,7 +393,7 @@ public sealed partial class PropBuilder
         for (var i = 0; i < tries; i++)
         {
             var p = new Vector3(_rng.RandfRange(-1f, 1f), 0, _rng.RandfRange(-1f, 1f)) * HexLayout.Radius;
-            if (HexLayout.DistanceToHexEdge(p.X, p.Z) < 0.03f || new Vector2(p.X, p.Z).Length() < _clearRadius)
+            if (HexLayout.DistanceToHexEdge(p.X, p.Z) < 0.03f || InZone(p.X, p.Z))
                 continue;
             _sampler.TerrainWeights(p.X, p.Z, w);
             var sample = _sampler.Evaluate(p.X, p.Z);
