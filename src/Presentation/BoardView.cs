@@ -166,7 +166,7 @@ public partial class BoardView : Node3D
 
     public static List<double> BuildTimes { get; } = new();
 
-    /// <summary>Provides each board slot's surroundings (roads, town tier...) when tiles are built.</summary>
+    /// <summary>Provides each board slot's surroundings (town tier, ridges, wonder lots...) when tiles are built.</summary>
     public Func<int, int, TileContext>? ContextProvider { get; set; }
 
     public TileVisual CreateTileVisual(TileSpec tile, int rotation, Vector3 worldCenter, int seed, bool worldWater = false,
@@ -289,8 +289,14 @@ public partial class BoardView : Node3D
         }
     }
 
+    /// <summary>Prop rebuilds since start and tiles still waiting (logged by the debug capture).</summary>
+    public static int Rebuilds { get; private set; }
+
+    public int PendingRebuilds => _rebuildQueue.Count;
+
     private void RebuildProps(int slot, TileContext context)
     {
+        Rebuilds++;
         if (!_tiles.TryGetValue(slot, out var visual) || visual.Sampler is null)
             return;
 
@@ -421,6 +427,7 @@ public partial class BoardView : Node3D
     /// <summary>Drops a freshly placed tile from <paramref name="fromHeight"/> with a springy landing.</summary>
     public TileVisual DropTile(int slot, PlacedTile placed, float fromHeight, Vector3 tilt)
     {
+        FrameBudget.Spend();
         var visual = AddTileImmediate(slot, placed, pop: false);
         visual.Landed = false;
         visual.SetGrow(0f);
@@ -620,7 +627,7 @@ public partial class BoardView : Node3D
         ProcessSites(dt);
 
         // One rebuild per frame keeps growth from hitching.
-        if (_rebuildQueue.Count > 0)
+        if (_rebuildQueue.Count > 0 && FrameBudget.TryClaim())
         {
             var (slot, context) = _rebuildQueue.Dequeue();
             if (_tiles.TryGetValue(slot, out var waiting) && waiting.Landed)

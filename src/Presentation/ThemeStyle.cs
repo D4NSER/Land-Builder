@@ -84,8 +84,32 @@ public sealed class ThemeStyle
         return conifers > total * 0.5f;
     }
 
-    public Color GroundA(Terrain t) => Ground[t].A;
-    public Color GroundB(Terrain t) => Ground[t].B;
+    public Color GroundA(Terrain t) => Separated[t].A;
+    public Color GroundB(Terrain t) => Separated[t].B;
+
+    private Dictionary<Terrain, (Color A, Color B)>? _separated;
+
+    /// <summary>
+    /// The theme's ground palette pushed apart so biomes read at a glance from the default camera: deep, cool
+    /// forest floor, warm paved town ground, lime orchards, olive-brown marsh and slightly richer meadows and fields.
+    /// </summary>
+    private Dictionary<Terrain, (Color A, Color B)> Separated => _separated ??= Separate(Ground);
+
+    private static Dictionary<Terrain, (Color A, Color B)> Separate(Dictionary<Terrain, (Color A, Color B)> ground)
+    {
+        static Color Saturate(Color c, float amount) => Color.FromHsv(c.H, Mathf.Clamp(c.S * amount, 0f, 1f), c.V);
+        (Color, Color) Map((Color A, Color B) pair, System.Func<Color, Color> f) => (f(pair.A), f(pair.B));
+
+        var result = new Dictionary<Terrain, (Color A, Color B)>(ground);
+        result[Terrain.Grass] = Map(ground[Terrain.Grass], c => Saturate(c, 1.12f).Lightened(0.04f));
+        result[Terrain.Forest] = Map(ground[Terrain.Forest], c => c.Darkened(0.22f).Lerp(new Color("1f4a34"), 0.3f));
+        result[Terrain.Field] = Map(ground[Terrain.Field], c => Saturate(c, 1.1f));
+        result[Terrain.Village] = Map(ground[Terrain.Village], c => c.Lerp(new Color("d6c49b"), 0.6f));
+        result[Terrain.Orchard] = Map(ground[Terrain.Orchard], c => c.Lerp(new Color("c2d96a"), 0.45f));
+        result[Terrain.Swamp] = Map(ground[Terrain.Swamp], c => c.Lerp(new Color("5c5532"), 0.45f));
+        result[Terrain.Mountain] = Map(ground[Terrain.Mountain], c => c.Lerp(new Color("8a8f98"), 0.25f));
+        return result;
+    }
 
     private static Dictionary<Terrain, (Color, Color)> BaseGround() => new()
     {

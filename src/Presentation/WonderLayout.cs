@@ -24,8 +24,8 @@ public static class WonderLayout
     public static float Scale(WonderType type) => type switch
     {
         WonderType.TallShip => 1f,
-        WonderType.Lighthouse => 1.8f,
-        _ => Wonders.Info(type).Size >= 4 ? 2.25f : 2.0f
+        WonderType.Lighthouse => 1.9f,
+        _ => 1.6f + (Wonders.Info(type).Size * 0.17f)
     };
 
     /// <summary>Height the lot is levelled to; the observatory sits on a raised plateau among its peaks.</summary>
@@ -43,6 +43,7 @@ public static class WonderLayout
         WonderType.RocketPad => (Terrain.Field, 270f),
         WonderType.BotanicalPark => (Terrain.Water, 270f),
         WonderType.GreatPagoda => (Terrain.Forest, 240f),
+        WonderType.SequoiaPark => (Terrain.Grass, 270f),
         _ => null
     };
 
@@ -106,7 +107,7 @@ public static class WonderLayout
         }
         else
         {
-            var radius = site.Type == WonderType.Lighthouse ? 0.8f : cells.Count >= 4 ? 1.4f : 1.25f;
+            var radius = site.Type == WonderType.Lighthouse ? 0.85f : 0.9f + (cells.Count * 0.1f);
             yield return new Zone(centre.X, centre.Z, radius, ZoneKind.Lot, lot);
         }
 

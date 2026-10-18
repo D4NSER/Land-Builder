@@ -32,7 +32,8 @@ public sealed class WonderTests
             }
         }
 
-        Assert.Equal(5, Wonders.Info(WonderType.TallShip).Size);
+        Assert.Equal(6, Wonders.Info(WonderType.TallShip).Size);
+        Assert.All(Wonders.All, t => Assert.True(Wonders.Info(t).Size >= 4, $"{t} should spread over a neighbourhood"));
         Assert.All(Wonders.Info(WonderType.TallShip).Cells, c => Assert.Equal(Terrain.Water, c.Terrain));
     }
 
@@ -53,7 +54,7 @@ public sealed class WonderTests
         Assert.Equal(WonderType.Cathedral, Assert.Single(next.Sites).Type);
         Assert.False(next.Sites[0].Built);
         Assert.Equal(0, next.Stats.TilesPlaced);
-        Assert.Equal(3, placed.Plan.Plots.Count);
+        Assert.Equal(Wonders.Info(WonderType.Cathedral).Size, placed.Plan.Plots.Count);
     }
 
     [Fact]
@@ -61,8 +62,9 @@ public sealed class WonderTests
     {
         var state = Board((Slot(0, 0), TileSpec.Pure(Terrain.Grass)));
         state.WonderCards.Add(WonderType.TallShip);
-        (state, _) = GameEngine.PlaceWonder(state, 0, Slot(1, 0), 0);
+        (state, _) = GameEngine.PlaceWonder(state, 0, Slot(2, 0), 0);
         Assert.Single(state.Sites);
+        Assert.Contains(Slot(1, 0), Wonders.Footprint(state.Sites[0]));
 
         state.CurrentTile = TileSpec.Pure(Terrain.Grass);
         Assert.Equal(PlacementRejectionReason.WrongTileForPlot, GameEngine.Evaluate(state, Slot(1, 0), 0).RejectionReason);
@@ -70,7 +72,7 @@ public sealed class WonderTests
         // One water edge is enough for the ship.
         state.CurrentTile = new TileSpec(Terrain.Water, Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Grass);
         var (next, events) = GameEngine.Place(state, Slot(1, 0), 3);
-        Assert.Contains(events, e => e is PlotFilledEvent { Done: 1, Total: 5 });
+        Assert.Contains(events, e => e is PlotFilledEvent { Done: 1, Total: 6 });
         Assert.True(next.Board.ContainsKey(Slot(1, 0)));
     }
 
@@ -155,6 +157,24 @@ public sealed class WonderTests
         }
 
         Assert.True(suited >= 12, $"only {suited} of 60 tiles suited the cathedral plots");
+    }
+
+    [Fact]
+    public void BuildingBesideAFinishedWonder_PaysADistrictBonus()
+    {
+        var mountain = TileSpec.Pure(Terrain.Mountain);
+        var plots = Wonders.Footprint(WonderType.Observatory, Slot(0, 0), 0);
+        var state = Board(plots.Select(p => (p, mountain)).ToArray());
+        state.WonderCards.Add(WonderType.Observatory);
+        (state, _) = GameEngine.PlaceWonder(state, 0, Slot(0, 0), 0);
+        Assert.True(state.Sites[0].Built);
+
+        state.CurrentTile = mountain;
+        var beside = state.CandidateSlots().First(s => HexGrid.GetNeighborSlots(s).Any(plots.Contains));
+        var withWonder = GameEngine.Evaluate(state, beside, 0).BonusPoints;
+        state.Sites.Clear();
+        var without = GameEngine.Evaluate(state, beside, 0).BonusPoints;
+        Assert.Equal(GameRules.WonderNeighbourBonus, withWonder - without);
     }
 
     [Fact]

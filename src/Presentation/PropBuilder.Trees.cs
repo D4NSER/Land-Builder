@@ -5,8 +5,51 @@ namespace LandBuilder.Presentation;
 /// <summary>The tree library: sixteen species, each a handful of low-poly primitives with its own silhouette.</summary>
 public sealed partial class PropBuilder
 {
-    private void AddForestTree(Vector3 p, float scale) =>
-        AddTree(PickWeighted(_style.ForestTrees), p, scale * _rng.RandfRange(0.95f, 1.2f));
+    /// <summary>
+    /// Forests grow in stands: world-space noise picks the locally dominant species (so a birch grove sits inside
+    /// the pines and carries on across the tile border), sizes run from saplings to old giants, and the odd glade
+    /// is left open with a stump, a log or mushrooms.
+    /// </summary>
+    private void AddForestTree(Vector3 p, float scale)
+    {
+        var world = _sampler.ToWorld(p.X, 0, p.Z);
+        var glade = Noise.Value(world.X * 2.2f, world.Z * 2.2f, 404);
+        if (glade > 0.86f)
+        {
+            AddUndergrowth(p, scale);
+            return;
+        }
+
+        var species = StandSpecies(world);
+        var size = _rng.Randf() switch
+        {
+            < 0.14f => _rng.RandfRange(0.55f, 0.72f),
+            > 0.9f => _rng.RandfRange(1.3f, 1.55f),
+            _ => _rng.RandfRange(0.88f, 1.2f)
+        };
+        AddTree(species, p, scale * size);
+    }
+
+    /// <summary>The species that dominates the stand at a world position, with a few strays mixed in.</summary>
+    private TreeSpecies StandSpecies(Vector3 world)
+    {
+        var options = _style.ForestTrees;
+        if (options.Length == 1 || _rng.Randf() < 0.18f)
+            return PickWeighted(options);
+        var total = 0f;
+        foreach (var (_, weight) in options)
+            total += weight;
+        // Fbm clusters around 0.5; stretch it so every species gets stands of its own.
+        var n = Mathf.Clamp((Noise.Fbm(world.X * 0.9f + 31f, world.Z * 0.9f - 17f, 2, 505) - 0.25f) * 2f, 0f, 0.999f) * total;
+        foreach (var (species, weight) in options)
+        {
+            if (n < weight)
+                return species;
+            n -= weight;
+        }
+
+        return options[^1].Species;
+    }
 
     private void AddMeadowTree(Vector3 p, float scale) =>
         AddTree(PickWeighted(_style.MeadowTrees), p, scale);
@@ -373,9 +416,11 @@ public sealed partial class PropBuilder
         var roll = _rng.Randf();
         if (_style.Rainforest && roll < 0.45f)
             AddFern(p, scale);
-        else if (roll < 0.6f)
-            AddBush(p, scale * 0.8f, Pick(_style.Leaves).Darkened(0.15f));
-        else if (roll < 0.82f)
+        else if (roll < 0.55f)
+            AddBush(p, scale * _rng.RandfRange(0.6f, 1f), Pick(_style.Leaves).Darkened(0.15f));
+        else if (roll < 0.72f)
+            AddFern(p, scale * 0.8f);
+        else if (roll < 0.86f)
             AddMushrooms(p, scale);
         else
             AddLog(p, scale);

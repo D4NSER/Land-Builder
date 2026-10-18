@@ -64,11 +64,18 @@ public static class GameEngine
             tiles = GameRules.PerfectTileReward;
         }
 
+        bonus += Wonders.BuiltNeighbours(state, slot) * GameRules.WonderNeighbourBonus;
         return new PlacementEvaluation(slot, rotation, true, null, matched, mismatched, neighbors, basePoints, multiplier, edgePoints, quality, bonus, tiles);
     }
 
-    public static (GameState State, IReadOnlyList<IDomainEvent> Events) Place(GameState state, int slot, int rotation)
+    public static (GameState State, IReadOnlyList<IDomainEvent> Events) Place(GameState state, int slot, int rotation) =>
+        Place(state, slot, rotation, null, out _);
+
+    /// <param name="before">The region map of <paramref name="state"/>, when the caller already has it.</param>
+    /// <param name="after">The region map of the returned state (null if the move was rejected).</param>
+    private static (GameState State, IReadOnlyList<IDomainEvent> Events) Place(GameState state, int slot, int rotation, RegionMap? before, out RegionMap? after)
     {
+        after = null;
         var events = new List<IDomainEvent>();
         var eval = Evaluate(state, slot, rotation);
         if (!eval.IsValid)
@@ -77,7 +84,7 @@ public static class GameEngine
             return (state, events);
         }
 
-        var before = RegionMap.Build(state.Board);
+        before ??= RegionMap.Build(state.Board);
         var next = state.Clone();
         var rng = new Rng { State = next.RngState };
         var turn = next.Turn + 1;
@@ -110,6 +117,7 @@ public static class GameEngine
         }
 
         var regions = RegionMap.Build(next.Board);
+        after = regions;
         ScoreConnections(before, regions, slot, next, ref stats, ref tilesAwarded, events);
 
         // Quests: resolve existing ones against the new region layout, then maybe offer a new one.
@@ -323,12 +331,12 @@ public static class GameEngine
         }
     }
 
-    public static IReadOnlyList<QuestStatus> GetQuestStatuses(GameState state)
+    public static IReadOnlyList<QuestStatus> GetQuestStatuses(GameState state, RegionMap? regions = null)
     {
         if (state.Quests.Count == 0)
             return [];
 
-        var regions = RegionMap.Build(state.Board);
+        regions ??= RegionMap.Build(state.Board);
         return state.Quests
             .Select(q =>
             {
@@ -365,12 +373,13 @@ public static class GameEngine
         if (shortlist.Count == 0)
             return null;
 
-        var questStatuses = GetQuestStatuses(state);
+        var current = RegionMap.Build(state.Board);
+        var questStatuses = GetQuestStatuses(state, current);
         PlacementEvaluation? best = null;
         var bestScore = double.MinValue;
         foreach (var (eval, _) in shortlist.OrderByDescending(x => x.Quick).ThenBy(x => x.Eval.Slot).ThenBy(x => x.Eval.Rotation).Take(HintShortlistSize))
         {
-            var (next, _) = Place(state, eval.Slot, eval.Rotation);
+            var (next, _) = Place(state, eval.Slot, eval.Rotation, current, out var regionsAfter);
             var score = (next.Score - state.Score)
                         + ((next.TilesLeft - state.TilesLeft) * 45.0)
                         + (eval.BuildsStreak ? 12 : 0)
@@ -378,7 +387,7 @@ public static class GameEngine
                         - (eval.MismatchedEdges.Count * 10)
                         + (eval.NeighborCount * 3)
                         + (Wonders.PlotAt(state, eval.Slot) is not null ? 40 : 0)
-                        + QuestProgressValue(questStatuses, next);
+                        + QuestProgressValue(questStatuses, next, regionsAfter!);
             if (score > bestScore)
             {
                 bestScore = score;
@@ -390,13 +399,12 @@ public static class GameEngine
     }
 
     /// <summary>Rewards moves that grow quest regions without overshooting exact targets.</summary>
-    private static double QuestProgressValue(IReadOnlyList<QuestStatus> before, GameState after)
+    private static double QuestProgressValue(IReadOnlyList<QuestStatus> before, GameState after, RegionMap regions)
     {
         if (before.Count == 0)
             return 0;
 
         var value = 0.0;
-        var regions = RegionMap.Build(after.Board);
         foreach (var status in before)
         {
             if (!after.Quests.Any(q => q.Id == status.Quest.Id))

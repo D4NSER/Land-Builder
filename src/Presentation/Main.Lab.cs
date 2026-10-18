@@ -36,6 +36,20 @@ public partial class Main
             state.Board[HexGrid.Encode(new HexCoord(0, 1))] = new PlacedTile(T(G, W, W, G, G, G), 0, 0);
             state.Board[HexGrid.Encode(new HexCoord(-1, 1))] = new PlacedTile(T(G, G, G, G, G, G), 0, 0);
         }
+        else if (args.FirstOrDefault(a => a.StartsWith("--lab-bench="))?.Split('=', 2)[1] is { } benchArg && int.TryParse(benchArg, out var benchTiles))
+        {
+            // A realistic big island for performance work: the bot plays a seeded run, laying wonders as it earns them.
+            state = GameState.CreateInitial(20251017UL, theme);
+            state.StackCount = benchTiles + 10;
+            for (var i = 0; i < benchTiles && !state.IsGameOver; i++)
+            {
+                if (state.WonderCards.Count > 0 && GameEngine.FindBestSite(state, 0) is { } site)
+                    (state, _) = GameEngine.PlaceWonder(state, 0, site.Anchor, site.Rotation);
+                if (GameEngine.FindBestPlacement(state) is not { } move)
+                    break;
+                (state, _) = GameEngine.Place(state, move.Slot, move.Rotation);
+            }
+        }
         else if (args.Contains("--lab-city"))
         {
             // A Capital: a two-ring blob of town tiles with meadows and fields around it.
@@ -60,17 +74,17 @@ public partial class Main
         {
             // Every wonder on a meadow, finished (or as half-filled blueprints with --lab-sites).
             var built = !args.Contains("--lab-sites");
-            for (var q = -8; q <= 7; q++)
+            for (var q = -10; q <= 9; q++)
             {
-                for (var r = -5; r <= 5; r++)
+                for (var r = -6; r <= 6; r++)
                 {
-                    if (System.Math.Abs(q + r) > 7)
+                    if (System.Math.Abs(q + r) > 9)
                         continue;
                     state.Board[HexGrid.Encode(new HexCoord(q, r))] = new PlacedTile(TileSpec.Pure(Terrain.Grass), 0, 0);
                 }
             }
 
-            (int Q, int R)[] spots = [(-6, -3), (-2, -3), (2, -3), (-6, 0), (-2, 0), (2, 0), (-5, 3), (-1, 3), (3, 2)];
+            (int Q, int R)[] spots = [(-5, -4), (-1, -4), (3, -4), (7, -4), (-7, 0), (-3, 0), (1, 0), (5, 0), (-5, 4), (0, 4)];
             for (var i = 0; i < Wonders.All.Count; i++)
             {
                 var type = Wonders.All[i];
@@ -84,6 +98,10 @@ public partial class Main
                     else
                         state.Board[plots[k]] = new PlacedTile(TileSpec.Pure(cells[k].Terrain), 0, 0);
                 }
+
+                // Neighbours of the wonder's main terrain, to show its district spilling over.
+                foreach (var ring in plots.SelectMany(HexGrid.GetNeighborSlots).Distinct().Where(n => !plots.Contains(n) && state.Board.ContainsKey(n)).Take(4))
+                    state.Board[ring] = new PlacedTile(TileSpec.Pure(cells[^1].Terrain == Terrain.Grass ? cells[0].Terrain : cells[^1].Terrain), 0, 0);
 
                 state.Sites.Add(new WonderSite(state.NextSiteId++, type, anchor, 0, 0, built));
             }
@@ -167,18 +185,25 @@ public partial class Main
         _hand = null;
         _board.SetCandidatesVisible(false);
         var far = args.Contains("--lab-far");
-        var showcase = args.Contains("--lab-showcase") || args.Contains("--lab-wonders") || args.Contains("--lab-lakes") || args.Contains("--lab-city");
+        var bench = args.Any(a => a.StartsWith("--lab-bench="));
+        var showcase = bench || args.Contains("--lab-showcase") || args.Contains("--lab-wonders") || args.Contains("--lab-lakes") || args.Contains("--lab-city");
         var close = args.Contains("--lab-close");
         _rig.Reframe(showcase ? new Vector3(0.4f, 0, 0.2f) : new Vector3(0.6f, 0, 0), far ? 7f : close ? 0.2f : showcase ? 2.6f : args.Contains("--lab-terrains") ? 1.8f : 1.0f, instant: true);
         if (close)
             _rig.Zoom(-3f);
+        if (bench)
+        {
+            _focusOverride = IslandCentre();
+            _rig.FrameRadius = IslandRadius();
+            _rig.Reframe(IslandCentre(), IslandRadius(), instant: true);
+        }
 
         // --lab-focus=N looks closely at the Nth wonder site.
         if (int.TryParse(args.FirstOrDefault(a => a.StartsWith("--lab-focus="))?.Split('=', 2)[1], out var focus) && focus < state.Sites.Count)
         {
             _focusOverride = WonderLayout.Centroid(state.Sites[focus]);
-            _rig.FrameRadius = 1.8f;
-            _rig.Reframe(_focusOverride.Value, 1.8f, instant: true);
+            _rig.FrameRadius = 2.3f;
+            _rig.Reframe(_focusOverride.Value, 2.3f, instant: true);
         }
         _rig.ScreenShift = 0f;
 

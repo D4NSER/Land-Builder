@@ -16,7 +16,7 @@ public sealed class TerrainSampler
 {
     public const float WaterLevel = -0.045f;
     public const float WaterRim = -0.17f;
-    public const float RiverHalfWidth = 0.13f;
+    public const float RiverHalfWidth = 0.095f;
     private const float BlendWidth = 0.13f;
 
     private readonly Terrain[] _sectors;
@@ -144,10 +144,16 @@ public sealed class TerrainSampler
     }
 
     /// <summary>1 inside the river channel, falling to 0 on the banks.</summary>
-    public float ChannelFactor(float x, float z)
+    public float ChannelFactor(float x, float z) => RiverProfile(x, z).Channel;
+
+    /// <summary>
+    /// The channel itself, plus a wider low "floodplain" around it so the river sits in gently sloping meadow
+    /// banks instead of a cliff-sided trench (which read as sea cutting between tiles).
+    /// </summary>
+    public (float Channel, float Bank) RiverProfile(float x, float z)
     {
         if (_riverPath.Count == 0)
-            return 0f;
+            return (0f, 0f);
 
         var p = new Vector2(x, z);
         var best = float.MaxValue;
@@ -164,8 +170,10 @@ public sealed class TerrainSampler
         var world = _toWorld * new Vector3(x, 0, z);
         var width = RiverHalfWidth + ((Noise.Value(world.X * 3f, world.Z * 3f, 91) - 0.5f) * 0.04f * rimFade);
         if (_riverSpring)
-            width = Mathf.Max(width, 0.2f - (p.Length() * 0.5f));
-        return 1f - Mathf.SmoothStep(width - 0.035f, width + 0.05f, best);
+            width = Mathf.Max(width, 0.17f - (p.Length() * 0.5f));
+        var channel = 1f - Mathf.SmoothStep(width - 0.03f, width + 0.035f, best);
+        var bank = 1f - Mathf.SmoothStep(width, width + 0.2f, best);
+        return (channel, bank);
     }
 
     private static float DistanceToSegment(Vector2 p, Vector2 a, Vector2 b)
@@ -270,10 +278,12 @@ public sealed class TerrainSampler
             }
         }
 
-        var channel = ChannelFactor(x, z);
-        if (channel > 0f)
+        var (channel, bank) = RiverProfile(x, z);
+        if (bank > 0f)
         {
-            var bed = -0.2f + (n * 0.02f);
+            // Land eases down towards the water line, then the bed dips just deep enough to read as water.
+            height = Mathf.Lerp(height, Mathf.Min(height, WaterLevel + 0.03f), bank * 0.9f);
+            var bed = -0.15f + (n * 0.02f);
             height = Mathf.Lerp(height, bed, channel);
             color = color.Lerp(_style.GroundB(Terrain.River), channel);
         }

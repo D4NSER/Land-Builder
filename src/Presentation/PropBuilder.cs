@@ -91,10 +91,10 @@ public sealed partial class PropBuilder
             TryLandmark(Count(Terrain.Forest) >= 2 ? Terrain.Forest : Terrain.Grass, AddTorii, 0.08f);
 
         // Structures shared with neighbours come first so the scatter keeps clear of them.
-        BuildRoads();
         BuildRidges();
         BuildSkyline(Count(Terrain.Village));
-        if (_context.VillageTier >= 1 && Count(Terrain.Village) >= 2 && _rng.Randf() < 0.5f + (_context.VillageTier * 0.2f))
+        DressNearWonder(Count);
+        if (_context.VillageTier is >= 1 and < CityTier && Count(Terrain.Village) >= 2 && _rng.Randf() < 0.5f + (_context.VillageTier * 0.2f))
             TryLandmark(Terrain.Village, (p, s) => AddMarket(p, s * BuildingScale), 0.12f);
         if (_context.ForestTier >= 1 && Count(Terrain.Forest) >= 2)
         {
@@ -116,8 +116,8 @@ public sealed partial class PropBuilder
             switch (terrain)
             {
                 case Terrain.Forest:
-                    Scatter(sector, terrain, Mathf.RoundToInt(N(8, 11) * dense), _style.Rainforest ? 0.07f : 0.08f, AddForestTree);
-                    Scatter(sector, terrain, Mathf.RoundToInt(N(2, 4) * dense), 0.05f, AddUndergrowth);
+                    Scatter(sector, terrain, Mathf.RoundToInt(N(11, 15) * dense), _style.Rainforest ? 0.06f : 0.066f, AddForestTree);
+                    Scatter(sector, terrain, Mathf.RoundToInt(N(3, 6) * dense), 0.045f, AddUndergrowth);
                     break;
                 case Terrain.Grass:
                     Scatter(sector, terrain, N(4, 7), 0.06f, AddMeadowDetail);
@@ -127,8 +127,10 @@ public sealed partial class PropBuilder
                     break;
                 case Terrain.Village:
                     var tier = Mathf.Min(_context.VillageTier, 4);
-                    Scatter(sector, terrain, N(2, 4) + tier, 0.17f - (tier * 0.015f), (p, s) => AddCityHouse(p, s));
-                    Scatter(sector, terrain, N(1, 3), 0.06f, AddVillageGreen);
+                    // Settlements are packed: more homes on every rung, tighter as the town grows.
+                    Scatter(sector, terrain, N(5, 7) + (tier * 2), 0.13f - (tier * 0.009f), (p, s) => AddCityHouse(p, s));
+                    if (tier < CityTier)
+                        Scatter(sector, terrain, N(1, 2), 0.06f, AddVillageGreen);
                     break;
                 case Terrain.Water:
                     Scatter(sector, terrain, N(1, 3), 0.07f, AddWaterDetail, allowWet: true);
@@ -168,7 +170,7 @@ public sealed partial class PropBuilder
         for (var attempt = 0; attempt < count * 10 && placed < count; attempt++)
         {
             var angle = HexLayout.EdgeAngle(sector) + _rng.RandfRange(-0.5f, 0.5f);
-            var radius = Mathf.Sqrt(_rng.RandfRange(0.03f, 1f)) * HexLayout.InRadius * 0.95f;
+            var radius = Mathf.Sqrt(_rng.RandfRange(0.003f, 1f)) * HexLayout.InRadius * 0.95f;
             var p = HexLayout.AngleToDirection(angle) * radius;
             if (HexLayout.DistanceToHexEdge(p.X, p.Z) < edgeMargin)
                 continue;
@@ -285,78 +287,6 @@ public sealed partial class PropBuilder
     // ---------------------------------------------------------------- shared structures
 
     private static Vector3 EdgeMid(int edge) => HexLayout.EdgeDirection(edge) * HexLayout.InRadius;
-
-    /// <summary>
-    /// Dirt roads from the village centre to every edge that meets a neighbouring village, with wooden bridges where
-    /// a road crosses a river. Neighbours draw their half from the same edge midpoint, so roads join up.
-    /// </summary>
-    private void BuildRoads()
-    {
-        if (_context.RoadEdges.Count == 0)
-            return;
-
-        var road = new Color("b39463");
-        var centre = Vector3.Zero;
-        foreach (var edge in _context.RoadEdges)
-        {
-            var end = EdgeMid(edge);
-            const int steps = 14;
-            for (var i = 0; i < steps; i++)
-            {
-                var a = centre.Lerp(end, i / (float)steps);
-                var b = centre.Lerp(end, (i + 1) / (float)steps);
-                var mid = (a + b) / 2f;
-                var dir = (b - a).Normalized();
-                var side = new Vector3(-dir.Z, 0, dir.X) * 0.038f;
-                var channel = _sampler.ChannelFactor(mid.X, mid.Z);
-                var ya = Ground(a);
-                var yb = Ground(b);
-                _occupied.Add(new Vector3(mid.X, 0, mid.Z));
-                Begin(mid with { Y = Ground(mid) });
-                _kit.Transform = Transform3D.Identity;
-                _kit.OrientFrom = null;
-                if (channel > 0.25f)
-                {
-                    // Bridge deck high over the water, with posts.
-                    var deck = Mathf.Max(TerrainSampler.WaterLevel + 0.05f, Mathf.Max(ya, yb) + 0.01f);
-                    var p0 = a with { Y = deck };
-                    var p1 = b with { Y = deck };
-                    _kit.Quad(p0 - side, p0 + side, p1 + side, p1 - side, new Color("a07a50"));
-                    At(mid with { Y = TerrainSampler.WaterLevel - 0.05f }, 0f, 1f);
-                    _kit.Box(new Vector3(0.012f, deck - TerrainSampler.WaterLevel + 0.05f, 0.012f), new Color("6b4a32"));
-                    continue;
-                }
-
-                var q0 = a with { Y = ya + 0.006f };
-                var q1 = b with { Y = yb + 0.006f };
-                _kit.Quad(q0 - side, q0 + side, q1 + side, q1 - side, road);
-            }
-
-            if (_context.VillageTier >= 1)
-            {
-                // Lamp posts line the bigger towns' streets.
-                var lamp = centre.Lerp(end, 0.55f) + (new Vector3(-(end - centre).Normalized().Z, 0, (end - centre).Normalized().X) * 0.06f);
-                lamp.Y = Ground(lamp);
-                if (_sampler.ChannelFactor(lamp.X, lamp.Z) < 0.05f)
-                {
-                    Begin(lamp);
-                    At(lamp, 0f, 1f);
-                    _kit.Box(new Vector3(0.006f, 0.07f, 0.006f), new Color("3a3a3a"));
-                    At(lamp + new Vector3(0, 0.07f, 0), 0f, 1f);
-                    _kit.Box(new Vector3(0.014f, 0.014f, 0.014f), new Color("ffe7a3"));
-                }
-            }
-        }
-
-        if (_context.RoadEdges.Count >= 2)
-        {
-            var c = centre with { Y = Ground(centre) };
-            Begin(c);
-            At(c + new Vector3(0, 0.004f, 0), 0f, 1f);
-            _kit.Frustum(10, 0.07f, 0.07f, 0.004f, road, road);
-            _occupied.Add(Vector3.Zero);
-        }
-    }
 
     /// <summary>Mountain spines continue across matched mountain edges: a crag straddles the shared border.</summary>
     private void BuildRidges()

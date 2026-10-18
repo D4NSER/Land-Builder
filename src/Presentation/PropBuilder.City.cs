@@ -26,7 +26,9 @@ public sealed partial class PropBuilder
         if (tier >= CapitalTier && downtown >= 1f && villageSectors >= 3)
             TryLandmark(Terrain.Village, (p, _) => AddCapitalLandmark(p), 0.14f);
 
-        var towers = tier >= MetropolisTier ? Mathf.RoundToInt(downtown * (villageSectors >= 4 ? 3.2f : 2f)) : 0;
+        // Towers from City upwards, many more downtown in a Metropolis or Capital.
+        var reach = tier >= CapitalTier ? 6f : tier >= MetropolisTier ? 4.5f : 2f;
+        var towers = Mathf.RoundToInt((0.25f + downtown) * reach * (villageSectors >= 4 ? 1f : 0.6f));
         for (var i = 0; i < towers; i++)
             TryLandmark(Terrain.Village, (p, s) => AddTowerShape(p, s * (0.75f + (downtown * 0.35f))), 0.09f);
 
@@ -45,7 +47,7 @@ public sealed partial class PropBuilder
     private void AddCityHouse(Vector3 p, float scale)
     {
         var tier = _context.VillageTier;
-        var urban = (tier >= CapitalTier ? 0.45f : tier >= MetropolisTier ? 0.35f : tier >= CityTier ? 0.25f : 0f) * (0.5f + _context.Downtown);
+        var urban = Mathf.Min(0.85f, (tier >= CapitalTier ? 0.6f : tier >= MetropolisTier ? 0.5f : tier >= CityTier ? 0.35f : 0f) * (0.6f + _context.Downtown));
         if (_rng.Randf() < urban)
             AddApartmentBlock(p, scale * 0.8f);
         else

@@ -23,6 +23,9 @@ public partial class BoardView
         public float GrowSpeed;
         public float GrowDelay;
 
+        /// <summary>Tiles whose ground must be levelled before the landmark can rise (one per frame).</summary>
+        public Queue<int>? LotQueue;
+
         /// <summary>The translucent floor of each plot still waiting for a tile.</summary>
         public readonly Dictionary<int, MeshInstance3D> Fills = new();
     }
@@ -123,9 +126,18 @@ public partial class BoardView
 
             if (site.Built)
             {
-                LevelLot(state, site);
-                BuildFinished(visual);
-                StartGrow(visual, animate && !wasBuilt ? 0.3f : 0f, animate && !wasBuilt ? 0.3f : 0f);
+                if (animate && !wasBuilt)
+                {
+                    // Level the lot over the next few frames, then raise the landmark (see ProcessSites).
+                    visual.LotQueue = new Queue<int>(SlotsToLevel(state, site));
+                }
+                else
+                {
+                    foreach (var slot in SlotsToLevel(state, site))
+                        LevelTile(slot);
+                    BuildFinished(visual);
+                    StartGrow(visual, 0f, 0f);
+                }
             }
             else
             {
@@ -161,20 +173,28 @@ public partial class BoardView
             part.Node.Visible = visual.Grow > 0.85f;
     }
 
-    /// <summary>Rebuilds the ground under a just-finished wonder at once, so the landmark is placed on its lot.</summary>
-    private void LevelLot(GameState state, WonderSite site)
+    /// <summary>Tiles under and around a finished wonder whose ground has to change for its lot.</summary>
+    private List<int> SlotsToLevel(GameState state, WonderSite site)
     {
+        var result = new List<int>();
         if (ContextProvider is null)
-            return;
-        var near = Wonders.Footprint(site).SelectMany(s => HexGrid.GetNeighborSlots(s).Append(s)).Distinct();
-        foreach (var slot in near)
+            return result;
+        foreach (var slot in Wonders.Footprint(site).SelectMany(s => HexGrid.GetNeighborSlots(s).Append(s)).Distinct())
         {
-            if (!_tiles.TryGetValue(slot, out var tile) || !state.Board.ContainsKey(slot))
-                continue;
-            var context = ContextProvider(slot, tile.Rotation);
-            if (context.TerrainKey != tile.TerrainKey)
-                RebuildTerrain(tile, context);
+            if (_tiles.TryGetValue(slot, out var tile) && state.Board.ContainsKey(slot) && ContextProvider(slot, tile.Rotation).TerrainKey != tile.TerrainKey)
+                result.Add(slot);
         }
+
+        return result;
+    }
+
+    private void LevelTile(int slot)
+    {
+        if (ContextProvider is null || !_tiles.TryGetValue(slot, out var tile))
+            return;
+        var context = ContextProvider(slot, tile.Rotation);
+        if (context.TerrainKey != tile.TerrainKey)
+            RebuildTerrain(tile, context);
     }
 
     private void BuildFinished(SiteVisual visual)
@@ -384,6 +404,20 @@ public partial class BoardView
     {
         foreach (var visual in _sites.Values)
         {
+            if (visual.LotQueue is { } lot)
+            {
+                if (lot.Count > 0 && FrameBudget.TryClaim())
+                    LevelTile(lot.Dequeue());
+                if (lot.Count == 0)
+                {
+                    visual.LotQueue = null;
+                    BuildFinished(visual);
+                    StartGrow(visual, 0.3f, 0.1f);
+                }
+
+                continue;
+            }
+
             if (visual.GrowSpeed > 0f)
             {
                 if (visual.GrowDelay > 0f)

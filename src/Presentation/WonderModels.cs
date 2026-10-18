@@ -78,6 +78,9 @@ public sealed partial class WonderModelBuilder
             case WonderType.TallShip:
                 BuildGalleon();
                 break;
+            case WonderType.SequoiaPark:
+                BuildSequoiaPark();
+                break;
         }
 
         return _kit.Commit(withCustom: true);

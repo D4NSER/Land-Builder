@@ -209,7 +209,7 @@ public partial class Main : Node3D
         if (_perfTimer >= 2f)
         {
             _perfTimer = 0f;
-            GD.Print($"[perf] fps={Engine.GetFramesPerSecond():0} tiles={_session?.State.Board.Count} draw={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} tileBuildMs(avg/p95/max)={BuildStat(0.5):0.0}/{BuildStat(0.95):0.0}/{BoardView.MaxBuildMs:0.0} builds={BoardView.BuildTimes.Count}");
+            GD.Print($"[perf] fps={Engine.GetFramesPerSecond():0} tiles={_session?.State.Board.Count} draw={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} tileBuildMs(avg/p95/max)={BuildStat(0.5):0.0}/{BuildStat(0.95):0.0}/{BoardView.MaxBuildMs:0.0} builds={BoardView.BuildTimes.Count} rebuilds={BoardView.Rebuilds} queued={_board.PendingRebuilds} frameMs={Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000:0.0}");
         }
 
         if (_zoomWaterFrame > 0 && _frame == _zoomWaterFrame)
@@ -744,7 +744,16 @@ public partial class Main : Node3D
         var before = _session.State;
         var handPosition = _hand?.Root.Position ?? HexLayout.SlotToWorld(slot) + new Vector3(0, HoverHeight, 0);
         var tilt = _hand?.Root.Rotation ?? Vector3.Zero;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        double Lap()
+        {
+            var ms = watch.Elapsed.TotalMilliseconds;
+            watch.Restart();
+            return ms;
+        }
+
         var events = _session.Place(slot, rotation);
+        var tRules = Lap();
         _sink.Clear();
         var after = _session.State;
         _idleHintTimer = 0f;
@@ -759,12 +768,20 @@ public partial class Main : Node3D
         var drop = _board.DropTile(slot, placed, handPosition.Y, tilt);
         _pendingFeedback[drop] = new PendingFeedback(before, after, events);
         _handPos.Snap(handPosition);
+        var tDrop = Lap();
 
         SetHand(after.CurrentTile, immediate: false);
+        var tHand = Lap();
         _board.SyncSites(after, animate: true);
+        var tSites = Lap();
         RefreshCandidates();
+        var tCand = Lap();
         RefreshHud();
+        var tHud = Lap();
         _board.RefreshContexts();
+        var tCtx = Lap();
+        if (_captureDir is not null)
+            GD.Print($"[place] rules={tRules:0.0} drop={tDrop:0.0} hand={tHand:0.0} sites={tSites:0.0} candidates={tCand:0.0} hud={tHud:0.0} contexts={tCtx:0.0}");
 
         if (!_attract)
             AutoSave();
@@ -1171,18 +1188,26 @@ public partial class Main : Node3D
     private RegionMap? _contextRegions;
 
     /// <summary>
-    /// How a tile relates to its neighbours: village size tier, roads into neighbouring villages, mountain ridges that
+    /// How a tile relates to its neighbours: village size tier, mountain ridges that
     /// continue across a border, and forest depth. Edges are converted to the tile's local frame.
     /// </summary>
-    private TileContext ContextFor(int slot, int rotation)
+    /// <summary>The region map for a state, built once and shared by tile contexts, quests and the land panel.</summary>
+    private RegionMap RegionsFor(GameState state)
     {
-        var state = _session.State;
-        if (!ReferenceEquals(_contextState, state))
+        if (!ReferenceEquals(_contextState, state) || _contextRegions is null)
         {
             _contextState = state;
             _contextRegions = RegionMap.Build(state.Board);
             _regionHearts.Clear();
         }
+
+        return _contextRegions;
+    }
+
+    private TileContext ContextFor(int slot, int rotation)
+    {
+        var state = _session.State;
+        RegionsFor(state);
 
         if (!state.Board.TryGetValue(slot, out var tile) || _contextRegions is null)
             return TileContext.Empty;
@@ -1190,7 +1215,6 @@ public partial class Main : Node3D
         var villageSize = 0;
         Region? village = null;
         var forestSize = 0;
-        var roads = new List<int>();
         var ridges = new List<int>();
         var lakes = new List<int>();
         for (var edge = 0; edge < 6; edge++)
@@ -1210,8 +1234,6 @@ public partial class Main : Node3D
                 continue;
             var theirs = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
             var local = GameEngine.NormalizeRotation(edge - rotation);
-            if (terrain == Terrain.Village && theirs == Terrain.Village)
-                roads.Add(local);
             if (terrain == Terrain.Mountain && theirs == Terrain.Mountain && slot < neighborSlot)
                 ridges.Add(local);
             if (terrain == Terrain.Water && theirs is Terrain.Water or Terrain.River)
@@ -1220,14 +1242,19 @@ public partial class Main : Node3D
 
         var villageTier = RegionTiers.Level(Terrain.Village, villageSize);
         var forestTier = forestSize >= 36 ? 2 : forestSize >= 16 ? 1 : 0;
-        roads.Sort();
         ridges.Sort();
         lakes.Sort();
-        return new TileContext(villageTier, roads, ridges, forestTier)
+        return new TileContext(villageTier, ridges, forestTier)
         {
             LakeEdges = lakes,
             Zones = ZonesNear(state, slot),
-            Downtown = village is null ? 0f : Downtown(village, slot)
+            Downtown = village is null || villageTier < 3 ? 0f : Downtown(village, slot),
+            WonderNear = state.Sites
+                .Where(s => s.Built)
+                .Select(s => (Site: s, Footprint: Wonders.Footprint(s)))
+                .Where(s => !s.Footprint.Contains(slot) && HexGrid.GetNeighborSlots(slot).Any(s.Footprint.Contains))
+                .Select(s => (WonderType?)s.Site.Type)
+                .FirstOrDefault()
         };
     }
 
@@ -1550,8 +1577,9 @@ public partial class Main : Node3D
         _hud.SetStack(state.CurrentTile, state.NextTile, state.TilesLeft, _rotation);
         _hud.SetUndo(state.UndosRemaining, _session.CanUndo);
         _hud.SetWonderCards(_attract ? [] : state.WonderCards, _wonderCard);
-        _hud.SetQuests(GameEngine.GetQuestStatuses(state));
-        _hud.SetLand(_attract ? [] : LandSummary(state));
+        var regions = RegionsFor(state);
+        _hud.SetQuests(GameEngine.GetQuestStatuses(state, regions));
+        _hud.SetLand(_attract ? [] : LandSummary(regions));
         _hud.SetBest(Math.Max(_best, _shownScore));
         if (_shownScore > state.Score || _shownScore == 0)
             _shownScore = state.Score;
@@ -1560,8 +1588,8 @@ public partial class Main : Node3D
     }
 
     /// <summary>The biggest region of each levelling terrain, best rungs first.</summary>
-    private static List<LandEntry> LandSummary(GameState state) =>
-        RegionMap.Build(state.Board).Regions
+    private static List<LandEntry> LandSummary(RegionMap regions) =>
+        regions.Regions
             .Where(r => RegionTiers.HasTiers(r.Terrain) && r.Size >= 3)
             .GroupBy(r => r.Terrain)
             .Select(g => g.OrderByDescending(r => r.Size).First())
@@ -1634,7 +1662,7 @@ public partial class Main : Node3D
         if (!ReferenceEquals(_questCacheState, _session.State))
         {
             _questCacheState = _session.State;
-            _questCache = GameEngine.GetQuestStatuses(_session.State);
+            _questCache = GameEngine.GetQuestStatuses(_session.State, RegionsFor(_session.State));
         }
 
         var statuses = _questCache;

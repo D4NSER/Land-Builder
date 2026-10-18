@@ -81,7 +81,26 @@ public partial class TilePreview : SubViewportContainer
         if (tile is null)
             return;
 
-        _visual = _factory(tile.Value, rotation);
+        // Building a new preview is a full tile build; wait for a frame with time to spare.
+        _pendingRotation = rotation;
+        _pendingAnimate = animate;
+        _pending = true;
+        if (FrameBudget.TryClaim())
+            BuildPending();
+    }
+
+    private bool _pending;
+    private int _pendingRotation;
+    private bool _pendingAnimate;
+
+    private void BuildPending()
+    {
+        _pending = false;
+        if (_tile is not TileSpec tile)
+            return;
+        var rotation = _pendingRotation;
+        var animate = _pendingAnimate;
+        _visual = _factory(tile, rotation);
         _pivot.AddChild(_visual.Root);
         _visual.SetGrow(1f);
         _targetYaw = HexLayout.RotationToYaw(rotation);
@@ -108,6 +127,8 @@ public partial class TilePreview : SubViewportContainer
 
     public override void _Process(double delta)
     {
+        if (_pending && FrameBudget.TryClaim())
+            BuildPending();
         var dt = (float)delta;
         _scale.Step(dt);
         _spin += dt;

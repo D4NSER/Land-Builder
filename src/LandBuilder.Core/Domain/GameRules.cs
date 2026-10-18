@@ -40,6 +40,9 @@ public static class GameRules
     /// <summary>While a blueprint has empty plots, this share of new tiles is dealt to suit one of them.</summary>
     public const double PlotTileChance = 0.3;
 
+    /// <summary>Building next to a finished wonder pays this much per wonder touched (its district grows).</summary>
+    public const int WonderNeighbourBonus = 20;
+
     public static double MultiplierForStreak(int streak) => 1.0 + (Math.Min(streak, StreakCap) * StreakStep);
 
     /// <summary>Score needed for milestone <paramref name="index"/> (0-based). Gaps widen steadily.</summary>

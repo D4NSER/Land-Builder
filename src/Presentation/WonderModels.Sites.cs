@@ -12,12 +12,10 @@ namespace LandBuilder.Presentation;
 /// </summary>
 public sealed partial class WonderModelBuilder
 {
-    private static readonly Color PathColor = new("dccba3");
-
     /// <summary>Dressing on and between the plots of a finished wonder.</summary>
     public ArrayMesh BuildSurroundings(WonderType type, IReadOnlyList<(Vector3 Offset, WonderCell Rule)> plots)
     {
-        // Each plot gets an "outer" spot past the central landmark, facing away start it.
+        // Each plot gets an "outer" spot past the central landmark, facing away from it.
         var outer = plots
             .Select(p =>
             {
@@ -27,13 +25,6 @@ public sealed partial class WonderModelBuilder
             })
             .OrderBy(o => Mathf.Atan2(-o.Dir.Z, o.Dir.X))
             .ToList();
-
-        // Gravel paths from the landmark out to every land plot tie the footprint together.
-        foreach (var (spot, dir, terrain) in outer)
-        {
-            if (terrain != Terrain.Water)
-                Path(dir * 0.55f, spot + (dir * 0.25f), 0.07f);
-        }
 
         if (type == WonderType.Castle)
             CurtainWall(outer.Select(o => o.Spot).ToList());
@@ -84,6 +75,14 @@ public sealed partial class WonderModelBuilder
                 case (WonderType.BotanicalPark, Terrain.Water):
                     Gazebo(spot - (dir * 0.15f));
                     break;
+                case (WonderType.SequoiaPark, Terrain.Forest):
+                    for (var k = 0; k < 4; k++)
+                        Sequoia(spot + (side * (k - 1.5f) * 0.22f) + (dir * ((k % 2) * 0.18f)), 1.1f + ((k % 3) * 0.2f), 0.4f + (k * 0.05f));
+                    break;
+                case (WonderType.SequoiaPark, Terrain.Grass):
+                    Lanterns(spot, side, 3);
+                    TownRow(spot + (dir * 0.15f), side, yaw, 1, i);
+                    break;
             }
         }
 
@@ -91,22 +90,6 @@ public sealed partial class WonderModelBuilder
     }
 
     // ---------------------------------------------------------------- dressing helpers
-
-    private void Path(Vector3 start, Vector3 end, float width)
-    {
-        var d = end - start;
-        var steps = Mathf.Max(2, Mathf.CeilToInt(d.Length() / 0.07f));
-        var yaw = Mathf.Atan2(-d.Z, d.X);
-        for (var i = 0; i < steps; i++)
-        {
-            var p = OnGround(start.Lerp(end, (i + 0.5f) / steps));
-            if (p.Y < _water + 0.005f)
-                continue;
-            Stage(p, 0.02f + (i * 0.01f), Sway.Rigid);
-            At(p - new Vector3(0, 0.012f, 0), yaw);
-            _kit.Box(new Vector3(d.Length() / steps * 1.05f, 0.018f, width), PathColor);
-        }
-    }
 
     /// <summary>Towers on the outer spot of every plot, joined by crenellated walls.</summary>
     private void CurtainWall(List<Vector3> spots)
@@ -321,6 +304,42 @@ public sealed partial class WonderModelBuilder
         _kit.Sway = Sway.Roof;
         At(p with { Y = floor + 0.1f });
         _kit.Frustum(8, 0.11f, 0f, 0.07f, new Color("5aa0a8"));
+    }
+
+    // ---------------------------------------------------------------- sequoia park
+
+    /// <summary>A giant redwood: fluted cinnamon trunk, then a narrow stack of dark crowns.</summary>
+    private void Sequoia(Vector3 at, float scale, float delay)
+    {
+        var p = OnGround(at);
+        var bark = new Color("9a4b2c");
+        Stage(p, delay, Sway.Trunk);
+        At(p - new Vector3(0, 0.02f, 0), _rng.Randf() * Mathf.Tau, scale);
+        _kit.Frustum(7, 0.05f, 0.03f, 0.5f, bark, bark.Darkened(0.1f));
+        _kit.Sway = Sway.Evergreen;
+        var leaf = new Color("2f5a37");
+        for (var i = 0; i < 4; i++)
+        {
+            At(p + new Vector3(0, (0.3f + (i * 0.1f)) * scale, 0), i, scale);
+            _kit.Frustum(7, 0.11f - (i * 0.02f), 0.02f, 0.16f, i % 2 == 0 ? leaf : leaf.Lightened(0.08f));
+        }
+    }
+
+    /// <summary>A ring of giant redwoods around a log ranger lodge, with the tallest tree of all beside it.</summary>
+    private void BuildSequoiaPark()
+    {
+        Plaza(0.55f, new Color("8a7a52"));
+        var lodge = OnGround(Dir(270) * 0.22f);
+        Stage(lodge, 0.1f);
+        At(lodge - new Vector3(0, 0.02f, 0), 0.3f);
+        _kit.Box(new Vector3(0.2f, 0.09f, 0.13f), new Color("8b6a4a"), new Color("a07a50"));
+        Stage(lodge, 0.25f, Sway.Roof);
+        At(lodge + new Vector3(0, 0.07f, 0), 0.3f);
+        _kit.GableRoof(0.24f, 0.17f, 0.08f, new Color("4a5a3a"), new Color("8b6a4a"));
+        Sequoia(Dir(90) * 0.12f, 1.8f, 0.35f);
+        for (var i = 0; i < 9; i++)
+            Sequoia(Dir(20 + (i * 40)) * _rng.RandfRange(0.38f, 0.5f), _rng.RandfRange(1.0f, 1.35f), 0.4f + (i * 0.04f));
+        Lanterns(Dir(270) * 0.42f, Dir(0), 3);
     }
 
     // ---------------------------------------------------------------- tall ship

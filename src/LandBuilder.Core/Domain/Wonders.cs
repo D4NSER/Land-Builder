@@ -11,7 +11,8 @@ public enum WonderType
     RocketPad = 5,
     Observatory = 6,
     BotanicalPark = 7,
-    TallShip = 8
+    TallShip = 8,
+    SequoiaPark = 9
 }
 
 /// <summary>
@@ -66,26 +67,30 @@ public static class Wonders
 
     private static WonderCell C(Terrain terrain, int min, params int[] steps) => new(steps, terrain, min);
 
+    // Footprints radiate from the anchor plot (step = grid direction, rotated with the blueprint), so each wonder
+    // spreads over a whole neighbourhood rather than a strip of tiles.
     private static readonly Dictionary<WonderType, WonderDef> Defs = new()
     {
         [WonderType.Castle] = new(WonderType.Castle, "Castle", "A walled keep crowning a town beneath the mountains",
-            [C(Terrain.Village, 3), C(Terrain.Village, 2, 0), C(Terrain.Mountain, 2, 1)], 450, 6),
+            [C(Terrain.Village, 3), C(Terrain.Village, 2, 0), C(Terrain.Village, 2, 1), C(Terrain.Village, 2, 5), C(Terrain.Mountain, 2, 3)], 600, 8),
         [WonderType.Cathedral] = new(WonderType.Cathedral, "Cathedral", "Twin spires at the heart of a city",
-            [C(Terrain.Village, 3), C(Terrain.Village, 3, 0), C(Terrain.Village, 3, 1)], 480, 6),
+            [C(Terrain.Village, 3), C(Terrain.Village, 3, 0), C(Terrain.Village, 3, 2), C(Terrain.Village, 3, 4)], 560, 7),
         [WonderType.GreatPagoda] = new(WonderType.GreatPagoda, "Great Pagoda", "Seven tiers rising over town and grove",
-            [C(Terrain.Village, 2), C(Terrain.Forest, 2, 0), C(Terrain.Forest, 2, 1)], 420, 6),
+            [C(Terrain.Village, 3), C(Terrain.Village, 2, 1), C(Terrain.Forest, 2, 0), C(Terrain.Forest, 2, 2), C(Terrain.Forest, 2, 4)], 600, 8),
         [WonderType.Harbour] = new(WonderType.Harbour, "Harbour", "Docks, warehouses and cranes on a town's waterfront",
-            [C(Terrain.Village, 2), C(Terrain.Water, 2, 0), C(Terrain.Water, 2, 1), C(Terrain.Village, 2, 0, 1)], 520, 7),
-        [WonderType.Lighthouse] = new(WonderType.Lighthouse, "Lighthouse", "A beacon on a headland between two lakes",
-            [C(Terrain.Grass, 2), C(Terrain.Water, 2, 0), C(Terrain.Water, 2, 3)], 380, 5),
+            [C(Terrain.Village, 2), C(Terrain.Village, 2, 2), C(Terrain.Village, 2, 4), C(Terrain.Water, 2, 0), C(Terrain.Water, 2, 1)], 620, 8),
+        [WonderType.Lighthouse] = new(WonderType.Lighthouse, "Lighthouse", "A beacon on a headland, water on three sides",
+            [C(Terrain.Grass, 2), C(Terrain.Water, 2, 0), C(Terrain.Water, 2, 2), C(Terrain.Water, 2, 4)], 480, 6),
         [WonderType.RocketPad] = new(WonderType.RocketPad, "Rocket Pad", "A launch tower out on the open plains",
-            [C(Terrain.Grass, 3), C(Terrain.Grass, 3, 0), C(Terrain.Field, 2, 1), C(Terrain.Field, 2, 0, 1)], 520, 7),
+            [C(Terrain.Grass, 3), C(Terrain.Grass, 3, 1), C(Terrain.Grass, 2, 4), C(Terrain.Field, 2, 0), C(Terrain.Field, 2, 3)], 620, 8),
         [WonderType.Observatory] = new(WonderType.Observatory, "Observatory", "A white dome high among the peaks",
-            [C(Terrain.Mountain, 3), C(Terrain.Mountain, 3, 0), C(Terrain.Mountain, 3, 1)], 450, 6),
+            [C(Terrain.Mountain, 3), C(Terrain.Mountain, 3, 0), C(Terrain.Mountain, 3, 2), C(Terrain.Mountain, 2, 4)], 560, 7),
         [WonderType.BotanicalPark] = new(WonderType.BotanicalPark, "Botanical Park", "A glass palm house in landscaped gardens",
-            [C(Terrain.Grass, 3), C(Terrain.Forest, 2, 0), C(Terrain.Water, 1, 1), C(Terrain.Forest, 2, 0, 1)], 480, 6),
+            [C(Terrain.Grass, 3), C(Terrain.Grass, 2, 0), C(Terrain.Forest, 2, 1), C(Terrain.Forest, 2, 3), C(Terrain.Water, 1, 5)], 600, 8),
         [WonderType.TallShip] = new(WonderType.TallShip, "Tall Ship", "A three-masted galleon riding at anchor",
-            [C(Terrain.Water, 1), C(Terrain.Water, 1, 0), C(Terrain.Water, 1, 0, 0), C(Terrain.Water, 1, 1), C(Terrain.Water, 1, 0, 1)], 600, 8)
+            [C(Terrain.Water, 1), C(Terrain.Water, 1, 0), C(Terrain.Water, 1, 0, 0), C(Terrain.Water, 1, 1), C(Terrain.Water, 1, 0, 1), C(Terrain.Water, 1, 3)], 720, 9),
+        [WonderType.SequoiaPark] = new(WonderType.SequoiaPark, "Sequoia Park", "A grove of giant redwoods around a ranger lodge",
+            [C(Terrain.Forest, 3), C(Terrain.Forest, 3, 0), C(Terrain.Forest, 3, 1), C(Terrain.Forest, 2, 2), C(Terrain.Forest, 2, 3), C(Terrain.Grass, 2, 4)], 720, 9)
     };
 
     public static IReadOnlyList<WonderType> All { get; } = Enum.GetValues<WonderType>();
@@ -100,6 +105,7 @@ public static class Wonders
         (WorldTheme.Temperate or WorldTheme.Autumn, WonderType.Cathedral or WonderType.Castle) => 2.5,
         (WorldTheme.Nordic, WonderType.Castle or WonderType.Lighthouse or WonderType.Observatory) => 2.5,
         (WorldTheme.Tropical, WonderType.Harbour or WonderType.TallShip or WonderType.BotanicalPark) => 2.5,
+        (WorldTheme.Nordic or WorldTheme.Autumn or WorldTheme.Temperate, WonderType.SequoiaPark) => 2,
         (WorldTheme.Savanna, WonderType.RocketPad or WonderType.Observatory) => 2.5,
         _ => 1
     };
@@ -181,6 +187,22 @@ public static class Wonders
         }
 
         return null;
+    }
+
+    /// <summary>Finished wonders whose footprint borders <paramref name="slot"/> (the slot itself not included).</summary>
+    public static int BuiltNeighbours(GameState state, int slot)
+    {
+        var count = 0;
+        foreach (var site in state.Sites)
+        {
+            if (!site.Built)
+                continue;
+            var footprint = Footprint(site);
+            if (Array.IndexOf(footprint, slot) < 0 && HexGrid.GetNeighborSlots(slot).Any(n => Array.IndexOf(footprint, n) >= 0))
+                count++;
+        }
+
+        return count;
     }
 
     /// <summary>Every slot claimed by any blueprint or finished wonder.</summary>
