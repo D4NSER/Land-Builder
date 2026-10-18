@@ -31,6 +31,7 @@ public sealed class SaveRepository
             StackCount = state.StackCount,
             CurrentTile = state.CurrentTile?.ToArray(),
             NextTile = state.NextTile?.ToArray(),
+            Upcoming = state.Upcoming.Select(t => t.ToArray()).ToList(),
             NextQuestId = state.NextQuestId,
             MilestonesReached = state.MilestonesReached,
             UndosRemaining = state.UndosRemaining,
@@ -109,7 +110,8 @@ public sealed class SaveRepository
                 Streak = payload.Streak,
                 StackCount = payload.StackCount,
                 CurrentTile = payload.CurrentTile is null ? null : TileSpec.FromArray(payload.CurrentTile),
-                NextTile = payload.NextTile is null ? null : TileSpec.FromArray(payload.NextTile),
+                Upcoming = payload.Upcoming?.Select(t => TileSpec.FromArray(t)).ToList()
+                           ?? (payload.NextTile is null ? new List<TileSpec>() : [TileSpec.FromArray(payload.NextTile)]),
                 NextQuestId = payload.NextQuestId,
                 MilestonesReached = payload.MilestonesReached,
                 UndosRemaining = payload.UndosRemaining,
@@ -168,6 +170,7 @@ public sealed class SaveRepository
         public int StackCount { get; set; }
         public Terrain[]? CurrentTile { get; set; }
         public Terrain[]? NextTile { get; set; }
+        public List<Terrain[]>? Upcoming { get; set; }
         public int NextQuestId { get; set; }
         public int MilestonesReached { get; set; }
         public int UndosRemaining { get; set; }

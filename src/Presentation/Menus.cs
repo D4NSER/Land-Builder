@@ -311,26 +311,32 @@ public partial class Menus : Control
         var panel = UiKit.Panel(padH: 40, padV: 30);
         var col = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         col.AddThemeConstantOverride("separation", 12);
-        col.CustomMinimumSize = new Vector2(640, 0);
+        col.CustomMinimumSize = new Vector2(1000, 0);
         panel.AddChild(col);
         col.AddChild(UiKit.Text("How to Play", 40, Palette.Ink, UiKit.Black, HorizontalAlignment.Center));
 
         (IconKind Glyph, Color Color, string Title, string Body)[] rules =
         [
-            (IconKind.Hex, Palette.TerrainSwatch(Terrain.Grass), "Lay tiles", "Each tile has six edges. Place it next to your island; rotate with Q / E, the mouse wheel while holding Shift, or a right-click."),
+            (IconKind.Hex, Palette.TerrainSwatch(Terrain.Grass), "Lay tiles", "Each tile has six edges. Place it next to your island; rotate with Q / E, the mouse wheel while holding Shift, or a right-click. You can see the next two tiles to plan ahead, and every tile is dealt with somewhere it fits cleanly."),
+            (IconKind.Flag, Palette.TerrainSwatch(Terrain.Village), "Grow & join", "Joined land levels up: a village becomes a Town, City, Metropolis and Capital; forests, lakes and fields have ladders too. Every rung pays points (and tiles), and enclosing a region pays a bonus."),
             (IconKind.Check, Palette.Good, "Match edges", "Every edge that touches the same terrain scores 10 points. Matching edges light up green before you place."),
             (IconKind.Star, Palette.AccentDeep, "Perfect fits", "Touch 3+ tiles with every edge matching for a Perfect: bonus points and a free tile. Fill a hole with all six matching for a Flawless!"),
             (IconKind.Streak, new Color("e8553f"), "Streaks", "Clean fits against two or more tiles grow your streak multiplier (up to ×2). A mismatched edge resets it."),
             (IconKind.Flag, Palette.TerrainSwatch(Terrain.Forest), "Quests", "Grow the marked forest, field, village or lake to the target size for points and extra tiles. 'Exactly' quests fail if you overshoot; any quest fails if its area gets closed in."),
             (IconKind.Mountain, Palette.TerrainSwatch(Terrain.Mountain), "Milestones & themes", "Each island rolls a theme (Green Isles, Northern Reach, Sakura Shores, Coral Coast, Amber Vale, Sunlit Plains) with its own architecture and trees. Score milestones add tiles, unlock new terrains and turn the season."),
-            (IconKind.Star, Palette.AccentDeep, "Wonders", "Every second milestone and every third quest earns a wonder card (castle, cathedral, pagoda, harbour, lighthouse, rocket pad, observatory, park). Place it whenever you like (G); it completes when its neighbours supply the terrain it needs."),
+            (IconKind.Star, Palette.AccentDeep, "Wonders", "Every second milestone and every third quest earns a wonder card. Pick it up (G), rotate the blueprint and lay it: each of its 4-6 golden plots needs a tile with enough of the right terrain. Fill them all to raise the wonder; building beside it later pays a district bonus."),
             (IconKind.River, Palette.TerrainSwatch(Terrain.River), "Rivers", "Once unlocked, river edges must meet another river or flow into a lake. A tile that fits nowhere is set aside."),
             (IconKind.Stack, Palette.Ink, "Your stack", "The run ends when the stack runs out, so keep it alive with perfects, quests and milestones. You have 3 undos per island.")
         ];
 
+        // Two columns keep the whole page on screen.
+        var grid = new GridContainer { Columns = 2, MouseFilter = MouseFilterEnum.Ignore };
+        grid.AddThemeConstantOverride("h_separation", 34);
+        grid.AddThemeConstantOverride("v_separation", 14);
+        col.AddChild(grid);
         foreach (var (glyph, color, title, body) in rules)
         {
-            var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+            var row = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore, SizeFlagsVertical = SizeFlags.ShrinkBegin };
             row.AddThemeConstantOverride("separation", 14);
             row.AddChild(UiKit.Badge(glyph, color, 44));
             var text = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -338,10 +344,10 @@ public partial class Menus : Control
             text.AddChild(UiKit.Text(title, 20, Palette.Ink, UiKit.Black));
             var b = UiKit.Text(body, 16, Palette.InkSoft);
             b.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            b.CustomMinimumSize = new Vector2(560, 0);
+            b.CustomMinimumSize = new Vector2(430, 0);
             text.AddChild(b);
             row.AddChild(text);
-            col.AddChild(row);
+            grid.AddChild(row);
         }
 
         col.AddChild(UiKit.Text("Camera: left-drag or WASD to pan, right-drag to orbit, wheel to zoom, F to re-centre. H shows a hint, Ctrl+Z undoes.", 15, Palette.InkSoft, UiKit.Bold, HorizontalAlignment.Center));

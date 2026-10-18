@@ -1578,7 +1578,7 @@ public partial class Main : Node3D
     private void RefreshHud()
     {
         var state = _session.State;
-        _hud.SetStack(state.CurrentTile, state.NextTile, state.TilesLeft, _rotation);
+        _hud.SetStack(state.CurrentTile, state.Upcoming, state.TilesLeft, _rotation);
         _hud.SetUndo(state.UndosRemaining, _session.CanUndo);
         _hud.SetWonderCards(_attract ? [] : state.WonderCards, _wonderCard);
         var regions = RegionsFor(state);

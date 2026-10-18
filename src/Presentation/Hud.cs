@@ -29,6 +29,7 @@ public partial class Hud : Control
     private Label _questHeader = null!;
     private TilePreview _handPreview = null!;
     private TilePreview _nextPreview = null!;
+    private TilePreview _thenPreview = null!;
     private Label _tilesLeftLabel = null!;
     private Control _stackCard = null!;
     private Control _stackShadows = null!;
@@ -242,8 +243,20 @@ public partial class Hud : Control
         _nextPreview = new TilePreview(_tileFactory, 84, 4.9f) { Spin = false };
         nextCol.AddChild(_nextPreview);
 
+        // The tile after next, a little smaller, so you can plan two moves ahead.
+        var thenCard = UiKit.Panel(new Color(Palette.Paper, 0.9f), radius: 14, padH: 4, padV: 4);
+        thenCard.Position = new Vector2(326, -100);
+        thenCard.CustomMinimumSize = new Vector2(82, 82);
+        anchor.AddChild(thenCard);
+        var thenCol = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        thenCol.AddThemeConstantOverride("separation", -6);
+        thenCard.AddChild(thenCol);
+        thenCol.AddChild(UiKit.Text("THEN", 11, Palette.InkSoft, UiKit.Black, HorizontalAlignment.Center));
+        _thenPreview = new TilePreview(_tileFactory, 70, 4.9f) { Spin = false };
+        thenCol.AddChild(_thenPreview);
+
         // Wonder cards sit to the right of the stack.
-        _wonderCards = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, Position = new Vector2(334, -200) };
+        _wonderCards = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, Position = new Vector2(428, -200) };
         _wonderCards.AddThemeConstantOverride("separation", 8);
         anchor.AddChild(_wonderCards);
 
@@ -362,11 +375,15 @@ public partial class Hud : Control
         _undoButton.Disabled = !canUndo;
     }
 
-    public void SetStack(TileSpec? current, TileSpec? next, int tilesLeft, int rotation)
+    public void SetStack(TileSpec? current, IReadOnlyList<TileSpec> upcoming, int tilesLeft, int rotation)
     {
+        TileSpec? next = upcoming.Count > 0 ? upcoming[0] : null;
+        TileSpec? then = upcoming.Count > 1 ? upcoming[1] : null;
         _handPreview.SetTile(current, rotation);
         _nextPreview.SetTile(next, 0);
         _nextPreview.GetParent().GetParent<Control>().Visible = next is not null;
+        _thenPreview.SetTile(then, 0);
+        _thenPreview.GetParent().GetParent<Control>().Visible = then is not null;
         if (tilesLeft != _lastTilesLeft)
         {
             var gained = _lastTilesLeft >= 0 && tilesLeft > _lastTilesLeft;

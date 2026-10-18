@@ -4,6 +4,12 @@ namespace LandBuilder.Domain;
 public static class GameRules
 {
     public const int StartingStack = 32;
+
+    /// <summary>Tiles shown after the one in hand, so moves can be planned ahead (they are still played in order).</summary>
+    public const int UpcomingShown = 2;
+
+    /// <summary>A dealt tile must have at least this many spots where every touching edge matches.</summary>
+    public const int CleanSpotsGuaranteed = 2;
     public const int UndosPerRun = 3;
 
     public const int PointsPerMatchedEdge = 10;

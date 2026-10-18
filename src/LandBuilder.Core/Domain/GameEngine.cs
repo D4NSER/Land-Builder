@@ -205,9 +205,8 @@ public static class GameEngine
         next.Stats = stats;
         next.StackCount += tilesAwarded;
 
-        // The hand stays as it was; just make sure a freshly earned stack shows its next tile.
-        if (next.StackCount > 0 && next.NextTile is null)
-            next.NextTile = TileGenerator.Generate(ref rng, next.Unlocked, next.Turn + 1, WantedTerrains(next), next.Theme);
+        // The hand stays as it was; just make sure a freshly earned stack shows its upcoming tiles.
+        RefillUpcoming(next, ref rng, next.Turn);
         return Finish(next, ref rng, next.Turn, events);
     }
 
@@ -552,39 +551,120 @@ public static class GameEngine
         events.Add(new QuestStartedEvent(quest, region.Size));
     }
 
-    /// <summary>The next tile from the stack, sometimes made to suit a blueprint plot that is still waiting.</summary>
-    private static TileSpec DealTile(GameState state, ref Rng rng, int turn, Terrain[] wanted)
+    /// <summary>
+    /// The next tile from the stack. It is always dealt with somewhere to go cleanly: a few fresh draws are tried
+    /// for one with at least <see cref="GameRules.CleanSpotsGuaranteed"/> spots where every touching edge matches,
+    /// and failing that the draw is reshaped to fit a real gap in the island. Sometimes it is made to suit a
+    /// blueprint plot that is still waiting.
+    /// </summary>
+    internal static TileSpec DealTile(GameState state, ref Rng rng, int turn, Terrain[] wanted)
     {
         var plots = state.Sites
             .Where(s => !s.Built)
             .SelectMany(s => Wonders.Progress(state, s).Plots.Where(p => !p.Filled).Select(p => p.Rule))
             .ToList();
-        if (plots.Count > 0 && rng.Chance(GameRules.PlotTileChance))
+        WonderCell? plotRule = plots.Count > 0 && rng.Chance(GameRules.PlotTileChance) ? plots[rng.NextInt(plots.Count)] : null;
+
+        TileSpec Draw(ref Rng r) => plotRule is { } rule
+            ? TileGenerator.GenerateFor(ref r, state.Unlocked, turn, rule.Terrain, rule.Min, state.Theme)
+            : TileGenerator.Generate(ref r, state.Unlocked, turn, wanted, state.Theme);
+
+        var candidates = state.CandidateSlots();
+        var first = Draw(ref rng);
+        if (CleanSpots(state, candidates, first, GameRules.CleanSpotsGuaranteed) >= GameRules.CleanSpotsGuaranteed)
+            return first;
+        for (var attempt = 0; attempt < 6; attempt++)
         {
-            var rule = plots[rng.NextInt(plots.Count)];
-            return TileGenerator.GenerateFor(ref rng, state.Unlocked, turn, rule.Terrain, rule.Min, state.Theme);
+            var tile = Draw(ref rng);
+            if (CleanSpots(state, candidates, tile, GameRules.CleanSpotsGuaranteed) >= GameRules.CleanSpotsGuaranteed)
+                return tile;
         }
 
-        return TileGenerator.Generate(ref rng, state.Unlocked, turn, wanted, state.Theme);
+        return FitToGap(state, candidates, first, ref rng);
+    }
+
+    /// <summary>Spots (up to <paramref name="enough"/>) where some rotation of the tile matches every touching edge.</summary>
+    private static int CleanSpots(GameState state, IReadOnlyList<int> candidates, TileSpec tile, int enough)
+    {
+        var count = 0;
+        foreach (var slot in candidates)
+        {
+            if (Wonders.PlotAt(state, slot) is { } plot && !Wonders.Suits(plot.Rule, tile))
+                continue;
+            for (var rotation = 0; rotation < 6; rotation++)
+            {
+                var clean = true;
+                for (var edge = 0; edge < 6 && clean; edge++)
+                {
+                    if (!state.Board.TryGetValue(HexGrid.NeighborSlot(slot, edge), out var neighbor))
+                        continue;
+                    var mine = tile.EdgeTerrain(edge, rotation);
+                    var theirs = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
+                    clean = Terrains.IsLegalContact(mine, theirs) && Terrains.Matches(mine, theirs);
+                }
+
+                if (!clean)
+                    continue;
+                count++;
+                break;
+            }
+
+            if (count >= enough)
+                return count;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Reshapes a drawn tile so it fits one gap in the island cleanly: the edges facing that gap's neighbours take
+    /// their terrain, the rest of the tile stays as drawn. Gaps with two or three neighbours are preferred, so the
+    /// fit is a satisfying one rather than a lone edge.
+    /// </summary>
+    private static TileSpec FitToGap(GameState state, IReadOnlyList<int> candidates, TileSpec drawn, ref Rng rng)
+    {
+        var options = candidates
+            .Where(s => Wonders.PlotAt(state, s) is null)
+            .Select(s => (Slot: s, Neighbours: HexGrid.GetNeighborSlots(s).Count(state.Board.ContainsKey)))
+            .OrderByDescending(o => o.Neighbours is >= 2 and <= 3 ? 1 : 0)
+            .ThenBy(o => o.Slot)
+            .ToList();
+        if (options.Count == 0)
+            return drawn;
+        var pick = options[rng.NextInt(Math.Min(options.Count, 4))].Slot;
+        var sectors = drawn.ToArray();
+        for (var edge = 0; edge < 6; edge++)
+        {
+            if (state.Board.TryGetValue(HexGrid.NeighborSlot(pick, edge), out var neighbor))
+                sectors[edge] = neighbor.EdgeTerrain(HexGrid.OppositeEdge(edge));
+        }
+
+        // A river sector left facing nowhere it can drain is fine (it waits for a river or lake neighbour later).
+        return TileSpec.FromArray(sectors);
+    }
+
+    /// <summary>Tops up the queue of upcoming tiles from the stack.</summary>
+    internal static void RefillUpcoming(GameState state, ref Rng rng, int turn)
+    {
+        var wanted = WantedTerrains(state);
+        while (state.Upcoming.Count < Math.Min(state.StackCount, GameRules.UpcomingShown))
+            state.Upcoming.Add(DealTile(state, ref rng, turn + 1 + state.Upcoming.Count, wanted));
     }
 
     private static void AdvanceHand(GameState state, ref Rng rng, int turn)
     {
-        var questTerrains = WantedTerrains(state);
-
-        if (state.StackCount > 0 && state.NextTile is null)
-            state.NextTile = TileGenerator.Generate(ref rng, state.Unlocked, turn + 1, questTerrains, state.Theme);
-
-        if (state.StackCount <= 0)
+        RefillUpcoming(state, ref rng, turn);
+        if (state.StackCount <= 0 || state.Upcoming.Count == 0)
         {
             state.CurrentTile = null;
-            state.NextTile = null;
+            state.Upcoming.Clear();
             state.StackCount = 0;
             return;
         }
 
-        state.CurrentTile = state.NextTile;
+        state.CurrentTile = state.Upcoming[0];
+        state.Upcoming.RemoveAt(0);
         state.StackCount -= 1;
-        state.NextTile = state.StackCount > 0 ? DealTile(state, ref rng, turn + 2, questTerrains) : null;
+        RefillUpcoming(state, ref rng, turn);
     }
 }

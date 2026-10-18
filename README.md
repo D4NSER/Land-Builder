@@ -33,6 +33,7 @@ Built with **Godot 4.6 (.NET)** and C#. Every mesh, shader effect, icon and soun
 | Fullscreen | `F11` |
 
 ### Rules and scoring
+- **Plan ahead:** you see the tile in hand plus the next two, and play them in order. Every tile is dealt with at least two spots where all its touching edges match (if a draw would fit nowhere cleanly, it is reshaped to fit a real gap), so there is always a right move to look for.
 - **Edges:** each tile has six wedges of terrain: meadow, forest, wheat field, village or lake to start. Every edge that touches the same terrain scores **10 points**. Mismatches are allowed but score nothing.
 - **World themes:** every island rolls one of six themes. Each has its own architecture, tree species, palette, sea and sky. It also shifts which terrains show up and decides which new terrains milestones unlock: Mountains, Dunes, Snowfields, Marsh or Orchards.
 

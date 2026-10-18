@@ -43,7 +43,26 @@ public sealed class GameState
     public ulong RngState { get; set; }
     public Dictionary<int, PlacedTile> Board { get; set; } = new();
     public TileSpec? CurrentTile { get; set; }
-    public TileSpec? NextTile { get; set; }
+    /// <summary>
+    /// The tiles after the one in hand, in the order they will be played (up to <see cref="GameRules.UpcomingShown"/>).
+    /// They are part of <see cref="StackCount"/>.
+    /// </summary>
+    public List<TileSpec> Upcoming { get; set; } = new();
+
+    /// <summary>The first upcoming tile. Setting it replaces that tile (null clears the queue).</summary>
+    public TileSpec? NextTile
+    {
+        get => Upcoming.Count > 0 ? Upcoming[0] : null;
+        set
+        {
+            if (value is not TileSpec tile)
+                Upcoming.Clear();
+            else if (Upcoming.Count > 0)
+                Upcoming[0] = tile;
+            else
+                Upcoming.Add(tile);
+        }
+    }
 
     /// <summary>Tiles left after the one in hand (the "next" tile is counted here).</summary>
     public int StackCount { get; set; }
@@ -93,8 +112,8 @@ public sealed class GameState
             new TileSpec(Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Forest, Terrain.Forest, Terrain.Grass), 0, 0);
 
         var rng = new Rng { State = state.RngState };
-        state.CurrentTile = TileGenerator.Generate(ref rng, state.Unlocked, 0, theme: state.Theme);
-        state.NextTile = TileGenerator.Generate(ref rng, state.Unlocked, 1, theme: state.Theme);
+        state.CurrentTile = GameEngine.DealTile(state, ref rng, 0, []);
+        GameEngine.RefillUpcoming(state, ref rng, 0);
         state.RngState = rng.State;
         return state;
     }
@@ -106,7 +125,7 @@ public sealed class GameState
         RngState = RngState,
         Board = new Dictionary<int, PlacedTile>(Board),
         CurrentTile = CurrentTile,
-        NextTile = NextTile,
+        Upcoming = new List<TileSpec>(Upcoming),
         StackCount = StackCount,
         Score = Score,
         Streak = Streak,
@@ -144,6 +163,6 @@ public sealed class GameState
         var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}"));
         var sites = string.Join(";", Sites.Select(s => $"{s.Id}:{s.Type}:{s.Anchor}:{s.Rotation}:{s.Built}"));
         var quests = string.Join(";", Quests.Select(q => $"{q.Id}:{q.Terrain}:{q.Kind}:{q.Target}"));
-        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{NextTile}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}|{string.Join(",", WonderCards)}|{sites}";
+        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{string.Join(",", Upcoming)}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}|{string.Join(",", WonderCards)}|{sites}";
     }
 }
