@@ -107,15 +107,21 @@ public static class WonderLayout
         }
         else
         {
-            var radius = site.Type == WonderType.Lighthouse ? 0.85f : 0.9f + (cells.Count * 0.1f);
+            var radius = site.Type switch
+            {
+                WonderType.Lighthouse => 0.85f,
+                WonderType.Observatory => 0.75f,
+                _ => 0.9f + (cells.Count * 0.1f)
+            };
             yield return new Zone(centre.X, centre.Z, radius, ZoneKind.Lot, lot);
         }
 
         for (var i = 0; i < slots.Length; i++)
         {
             var p = HexLayout.SlotToWorld(slots[i]);
-            var land = cells[i].Terrain != Terrain.Water && site.Type != WonderType.TallShip;
-            yield return new Zone(p.X, p.Z, land ? 0.72f : 0.6f, land ? ZoneKind.Lot : ZoneKind.Clear, lot);
+            // Land plots are levelled for the buildings on them; mountains keep their peaks and water stays water.
+            var level = cells[i].Terrain is not (Terrain.Water or Terrain.Mountain) && site.Type != WonderType.TallShip;
+            yield return new Zone(p.X, p.Z, level ? 0.72f : 0.6f, level ? ZoneKind.Lot : ZoneKind.Clear, lot);
         }
     }
 

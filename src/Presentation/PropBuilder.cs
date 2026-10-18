@@ -93,6 +93,7 @@ public sealed partial class PropBuilder
         // Structures shared with neighbours come first so the scatter keeps clear of them.
         BuildRidges();
         BuildSkyline(Count(Terrain.Village));
+        BuildTownSeams();
         DressNearWonder(Count);
         if (_context.VillageTier is >= 1 and < CityTier && Count(Terrain.Village) >= 2 && _rng.Randf() < 0.5f + (_context.VillageTier * 0.2f))
             TryLandmark(Terrain.Village, (p, s) => AddMarket(p, s * BuildingScale), 0.12f);
@@ -287,6 +288,35 @@ public sealed partial class PropBuilder
     // ---------------------------------------------------------------- shared structures
 
     private static Vector3 EdgeMid(int edge) => HexLayout.EdgeDirection(edge) * HexLayout.InRadius;
+
+    /// <summary>
+    /// Where this town meets a neighbouring one, a row of houses (or blocks and towers in a city) is built right on
+    /// the shared edge, so joined towns read as one continuous settlement instead of two with a strip between them.
+    /// </summary>
+    private void BuildTownSeams()
+    {
+        Span<float> w = stackalloc float[Terrains.Count];
+        foreach (var edge in _context.TownSeams)
+        {
+            var dir = HexLayout.EdgeDirection(edge);
+            var along = new Vector3(-dir.Z, 0, dir.X);
+            var count = 5 + Mathf.Min(_context.VillageTier, 3);
+            for (var i = 0; i < count; i++)
+            {
+                var t = Mathf.Lerp(-0.42f, 0.42f, i / (float)(count - 1)) + _rng.RandfRange(-0.03f, 0.03f);
+                var p = (dir * (HexLayout.InRadius + _rng.RandfRange(-0.03f, 0.02f))) + (along * t);
+                // Check our own side of the seam is town and dry.
+                var inside = p - (dir * 0.05f);
+                _sampler.TerrainWeights(inside.X, inside.Z, w);
+                if (w[(int)Terrain.Village] < 0.8f || !IsDry(inside.X, inside.Z) || InZone(p.X, p.Z))
+                    continue;
+                p.Y = Ground(inside);
+                _occupied.Add(new Vector3(p.X, 0, p.Z));
+                Begin(p);
+                AddCityHouse(p, _rng.RandfRange(0.85f, 1.05f));
+            }
+        }
+    }
 
     /// <summary>Mountain spines continue across matched mountain edges: a crag straddles the shared border.</summary>
     private void BuildRidges()

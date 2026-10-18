@@ -90,6 +90,16 @@ public partial class BoardView
         return sampler.Evaluate(local.X, local.Z).Height;
     }
 
+    /// <summary>Ground colour at a world point, from whichever tile is there.</summary>
+    public Color WorldColor(float x, float z)
+    {
+        var slot = HexLayout.WorldToSlot(new Vector3(x, 0, z));
+        if (!_tiles.TryGetValue(slot, out var visual) || visual.Sampler is not TerrainSampler sampler)
+            return Style.GroundA(Terrain.Grass);
+        var local = sampler.ToLocalTransform * new Vector3(x, 0, z);
+        return sampler.Evaluate(local.X, local.Z).Color;
+    }
+
     /// <summary>Brings site visuals in line with the rules: new blueprints, freshly filled plots, finished wonders.</summary>
     public void SyncSites(GameState state, bool animate)
     {
@@ -223,7 +233,14 @@ public partial class BoardView
             return (WorldHeight(world.X, world.Z) - holderY) / scale;
         }
 
-        var builder = new WonderModelBuilder(LocalGround, Style, holder, seed, (TerrainSampler.WaterLevel - holderY) / scale);
+        var builder = new WonderModelBuilder(LocalGround, Style, holder, seed, (TerrainSampler.WaterLevel - holderY) / scale)
+        {
+            GroundColor = (x, z) =>
+            {
+                var world = centre + (basis * new Vector3(x * scale, 0, z * scale));
+                return WorldColor(world.X, world.Z);
+            }
+        };
         AddGrowing(visual, holder, builder.Build(site.Type), builder.Parts);
 
         // Walls, piers, gardens... over each plot, in an unscaled frame.
@@ -250,7 +267,10 @@ public partial class BoardView
 
             var holder = new Node3D { Name = "Scaffold", Position = centre with { Y = 0 }, Scale = Vector3.One * 0.8f };
             visual.Root.AddChild(holder);
-            var builder = new WonderModelBuilder((x, z) => WorldHeight(centre.X + (x * 0.8f), centre.Z + (z * 0.8f)) / 0.8f, Style, holder, seed + plot.Slot);
+            var builder = new WonderModelBuilder((x, z) => WorldHeight(centre.X + (x * 0.8f), centre.Z + (z * 0.8f)) / 0.8f, Style, holder, seed + plot.Slot)
+            {
+                GroundColor = (x, z) => WorldColor(centre.X + (x * 0.8f), centre.Z + (z * 0.8f))
+            };
             AddGrowing(visual, holder, builder.BuildScaffold(visual.Site.Type), builder.Parts);
         }
     }

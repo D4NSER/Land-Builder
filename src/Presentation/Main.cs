@@ -1216,6 +1216,7 @@ public partial class Main : Node3D
         Region? village = null;
         var forestSize = 0;
         var ridges = new List<int>();
+        var seams = new List<int>();
         var lakes = new List<int>();
         for (var edge = 0; edge < 6; edge++)
         {
@@ -1236,6 +1237,8 @@ public partial class Main : Node3D
             var local = GameEngine.NormalizeRotation(edge - rotation);
             if (terrain == Terrain.Mountain && theirs == Terrain.Mountain && slot < neighborSlot)
                 ridges.Add(local);
+            if (terrain == Terrain.Village && theirs == Terrain.Village && slot < neighborSlot)
+                seams.Add(local);
             if (terrain == Terrain.Water && theirs is Terrain.Water or Terrain.River)
                 lakes.Add(local);
         }
@@ -1247,6 +1250,7 @@ public partial class Main : Node3D
         return new TileContext(villageTier, ridges, forestTier)
         {
             LakeEdges = lakes,
+            TownSeams = seams,
             Zones = ZonesNear(state, slot),
             Downtown = village is null || villageTier < 3 ? 0f : Downtown(village, slot),
             WonderNear = state.Sites

@@ -39,6 +39,12 @@ public sealed record TileContext(int VillageTier, IReadOnlyList<int> RidgeEdges,
     /// <summary>How close this tile is to the heart of its settlement: 1 at the very centre, 0 at the edge.</summary>
     public float Downtown { get; init; }
 
+    /// <summary>
+    /// Edges where this tile's town meets a neighbouring town and this tile builds the houses straddling the seam
+    /// (each shared edge has exactly one owner, so the row is built once).
+    /// </summary>
+    public IReadOnlyList<int> TownSeams { get; init; } = [];
+
     /// <summary>A finished wonder this tile borders (but is not part of), whose district style spills onto it.</summary>
     public WonderType? WonderNear { get; init; }
 
@@ -48,5 +54,5 @@ public sealed record TileContext(int VillageTier, IReadOnlyList<int> RidgeEdges,
     /// <summary>Changes whenever the ground itself has to be rebuilt, not just the props on it.</summary>
     public string TerrainKey => string.Join(",", LakeEdges) + "|" + string.Join(";", Zones.Select(z => z.Key));
 
-    public string Key => $"{VillageTier}|{Downtown:0.0}|{WonderNear}|{string.Join(",", RidgeEdges)}|{ForestTier}|{TerrainKey}";
+    public string Key => $"{VillageTier}|{Downtown:0.0}|{WonderNear}|{string.Join(",", TownSeams)}|{string.Join(",", RidgeEdges)}|{ForestTier}|{TerrainKey}";
 }

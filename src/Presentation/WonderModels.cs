@@ -106,12 +106,21 @@ public sealed partial class WonderModelBuilder
 
     private void At(Vector3 p, Basis basis) => _kit.Transform = new Transform3D(basis, p);
 
+    /// <summary>Colour of the land under a point of this builder's frame, so foundations take on the tiles' colours.</summary>
+    public Func<float, float, Color>? GroundColor { get; init; }
+
+    /// <summary>
+    /// A low foundation pad under the landmark itself. It is kept small and tinted towards the ground beneath it,
+    /// so the wonder stands on its own tiles' colours instead of on a big grey or brown slab.
+    /// </summary>
     private void Plaza(float radius, Color color, float delay = 0f)
     {
         var c = OnGround(0, 0);
+        var pad = Mathf.Min(radius * 0.42f, 0.24f);
+        var tint = GroundColor is { } ground ? ground(0, 0).Lerp(color, 0.35f) : color;
         Stage(c, delay, Sway.Rigid);
         At(c - new Vector3(0, 0.02f, 0));
-        _kit.Frustum(6, radius, radius * 0.97f, 0.035f, color.Darkened(0.1f), color, twist: Mathf.Pi / 6f);
+        _kit.Frustum(12, pad, pad * 0.95f, 0.03f, tint.Darkened(0.12f), tint);
     }
 
     /// <summary>Straight wall between two points with crenellations along the top.</summary>
