@@ -1,239 +1,168 @@
 namespace LandBuilder.Domain;
 
-public enum EdgeType
+public enum QuestKind
 {
-    Field = 0,
-    Forest = 1,
-    Water = 2,
-    Town = 3
+    /// <summary>Grow the region to at least the target size.</summary>
+    AtLeast = 0,
+
+    /// <summary>Hit the target size exactly; overshooting fails the quest.</summary>
+    Exactly = 1
 }
 
-public enum TileType
+public sealed record Quest(
+    int Id,
+    Terrain Terrain,
+    QuestKind Kind,
+    int Target,
+    SectorRef Anchor,
+    int RewardTiles,
+    int RewardPoints,
+    int CreatedTurn);
+
+public sealed record RunStats(
+    int TilesPlaced,
+    int PerfectPlacements,
+    int FlawlessPlacements,
+    int QuestsCompleted,
+    int QuestsFailed,
+    int BestStreak,
+    int LargestRegion,
+    Terrain LargestRegionTerrain,
+    int WondersBuilt = 0,
+    int TiersReached = 0,
+    int RegionsClosed = 0,
+    int BestVillage = 0)
 {
-    Plains = 0,
-    Woods = 1,
-    River = 2,
-    Village = 3,
-    Meadow = 4,
-    Lake = 5
+    public static RunStats Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, Terrain.Grass);
 }
 
-public enum PlacementRejectionReason
+public sealed class GameState
 {
-    OutOfBounds = 0,
-    SlotOccupied = 1,
-    NoTileInHand = 2,
-    IncompatibleAdjacent = 3
-}
-
-public sealed record TileDefinition(
-    TileType TileType,
-    EdgeType North,
-    EdgeType East,
-    EdgeType South,
-    EdgeType West,
-    int BaseCoins,
-    int MatchBonusPerEdge
-);
-
-public sealed record PlacedTile(TileType TileType, int RotationQuarterTurns);
-
-public sealed class GameState : IEquatable<GameState>
-{
-    private SortedSet<TileType> _unlockedTiles = new() { TileType.Plains };
-
-    public const int BoardWidth = 3;
-    public const int BoardHeight = 3;
-
-    public long Coins { get; set; }
+    public ulong Seed { get; set; }
+    public WorldTheme Theme { get; set; }
     public ulong RngState { get; set; }
-    public int RngStep { get; set; }
-    public TileType? CurrentTile { get; set; }
     public Dictionary<int, PlacedTile> Board { get; set; } = new();
-    public string LastMessage { get; set; } = "Ready";
-    public IReadOnlyCollection<TileType> UnlockedTiles => _unlockedTiles;
+    public TileSpec? CurrentTile { get; set; }
+    /// <summary>
+    /// The tiles after the one in hand, in the order they will be played (up to <see cref="GameRules.UpcomingShown"/>).
+    /// They are part of <see cref="StackCount"/>.
+    /// </summary>
+    public List<TileSpec> Upcoming { get; set; } = new();
 
-    public static IReadOnlyList<TileType> AllTileTypes { get; } = Enum.GetValues<TileType>().OrderBy(x => x).ToArray();
-
-    public static IReadOnlyDictionary<TileType, int> UnlockCosts { get; } = new Dictionary<TileType, int>
+    /// <summary>The first upcoming tile. Setting it replaces that tile (null clears the queue).</summary>
+    public TileSpec? NextTile
     {
-        [TileType.Plains] = 0,
-        [TileType.Woods] = 10,
-        [TileType.River] = 20,
-        [TileType.Meadow] = 30,
-        [TileType.Village] = 40,
-        [TileType.Lake] = 50
+        get => Upcoming.Count > 0 ? Upcoming[0] : null;
+        set
+        {
+            if (value is not TileSpec tile)
+                Upcoming.Clear();
+            else if (Upcoming.Count > 0)
+                Upcoming[0] = tile;
+            else
+                Upcoming.Add(tile);
+        }
+    }
+
+    /// <summary>Tiles left after the one in hand (the "next" tile is counted here).</summary>
+    public int StackCount { get; set; }
+
+    public long Score { get; set; }
+    public int Streak { get; set; }
+    public List<Quest> Quests { get; set; } = new();
+    public int NextQuestId { get; set; } = 1;
+    public List<Terrain> Unlocked { get; set; } = new();
+    public int MilestonesReached { get; set; }
+    public int UndosRemaining { get; set; }
+    public RunStats Stats { get; set; } = RunStats.Empty;
+    public bool IsGameOver { get; set; }
+
+    /// <summary>Wonder cards held, placeable at any time without using the stack.</summary>
+    public List<WonderType> WonderCards { get; set; } = new();
+
+    /// <summary>Wonder blueprints laid on the island, finished or not.</summary>
+    public List<WonderSite> Sites { get; set; } = new();
+    public int NextSiteId { get; set; } = 1;
+
+    public int Turn => Stats.TilesPlaced;
+
+    /// <summary>Total tiles still to be placed, including the one in hand.</summary>
+    public int TilesLeft => (CurrentTile is null ? 0 : 1) + StackCount;
+
+    public double StreakMultiplier => GameRules.MultiplierForStreak(Streak);
+
+    public long NextMilestoneScore => GameRules.MilestoneThreshold(MilestonesReached);
+
+    public long PreviousMilestoneScore => MilestonesReached == 0 ? 0 : GameRules.MilestoneThreshold(MilestonesReached - 1);
+
+    public static GameState CreateInitial(ulong seed, WorldTheme? theme = null)
+    {
+        var state = new GameState
+        {
+            Seed = seed,
+            Theme = theme ?? Themes.FromSeed(seed),
+            RngState = new Rng(seed).State,
+            Unlocked = Terrains.Starting.ToList(),
+            StackCount = GameRules.StartingStack,
+            UndosRemaining = GameRules.UndosPerRun
+        };
+
+        // Starter tile: a calm meadow with a little forest so the first placements are easy to match.
+        state.Board[HexGrid.OriginSlotIndex] = new PlacedTile(
+            new TileSpec(Terrain.Grass, Terrain.Grass, Terrain.Grass, Terrain.Forest, Terrain.Forest, Terrain.Grass), 0, 0);
+
+        var rng = new Rng { State = state.RngState };
+        state.CurrentTile = GameEngine.DealTile(state, ref rng, 0, []);
+        GameEngine.RefillUpcoming(state, ref rng, 0);
+        state.RngState = rng.State;
+        return state;
+    }
+
+    public GameState Clone() => new()
+    {
+        Seed = Seed,
+        Theme = Theme,
+        RngState = RngState,
+        Board = new Dictionary<int, PlacedTile>(Board),
+        CurrentTile = CurrentTile,
+        Upcoming = new List<TileSpec>(Upcoming),
+        StackCount = StackCount,
+        Score = Score,
+        Streak = Streak,
+        Quests = new List<Quest>(Quests),
+        NextQuestId = NextQuestId,
+        Unlocked = new List<Terrain>(Unlocked),
+        MilestonesReached = MilestonesReached,
+        UndosRemaining = UndosRemaining,
+        Stats = Stats,
+        IsGameOver = IsGameOver,
+        WonderCards = new List<WonderType>(WonderCards),
+        Sites = new List<WonderSite>(Sites),
+        NextSiteId = NextSiteId
     };
 
-    public static IReadOnlyDictionary<TileType, int> ScoreBasePoints { get; } = new Dictionary<TileType, int>
+    /// <summary>Empty slots touching the island: the only legal placement targets.</summary>
+    public IReadOnlyList<int> CandidateSlots()
     {
-        [TileType.Plains] = 1,
-        [TileType.Woods] = 2,
-        [TileType.River] = 3,
-        [TileType.Meadow] = 4,
-        [TileType.Village] = 5,
-        [TileType.Lake] = 6
-    };
-
-    public int Score => ComputeScore(Board);
-
-    public static GameState CreateInitial(ulong seed = 0xC0FFEEUL)
-    {
-        return new GameState
+        var result = new SortedSet<int>();
+        foreach (var slot in Board.Keys)
         {
-            Coins = 0,
-            RngState = seed,
-            RngStep = 0,
-            CurrentTile = null,
-            Board = new Dictionary<int, PlacedTile>(),
-            LastMessage = "Draw a tile to begin."
-        };
-    }
-
-    public GameState Clone()
-    {
-        var clone = new GameState
-        {
-            Coins = Coins,
-            RngState = RngState,
-            RngStep = RngStep,
-            CurrentTile = CurrentTile,
-            LastMessage = LastMessage,
-            Board = Board.ToDictionary(k => k.Key, v => v.Value)
-        };
-        clone.SetUnlockedTiles(_unlockedTiles);
-        return clone;
-    }
-
-    public bool IsUnlocked(TileType tile) => _unlockedTiles.Contains(tile);
-
-    public GameState Unlock(TileType tile)
-    {
-        if (_unlockedTiles.Contains(tile))
-            return this;
-
-        var cost = UnlockCosts.TryGetValue(tile, out var value)
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(tile), tile, "Unknown tile unlock cost.");
-
-        if (Coins < cost)
-            throw new InvalidOperationException("Not enough coins to unlock tile.");
-
-        var next = Clone();
-        next.Coins -= cost;
-        next._unlockedTiles.Add(tile);
-        next.LastMessage = $"Unlocked {tile} for {cost} coins.";
-        return next;
-    }
-
-    public void SetUnlockedTiles(IEnumerable<TileType> tiles)
-    {
-        var normalized = new SortedSet<TileType>(tiles);
-        if (normalized.Count == 0)
-            normalized.Add(TileType.Plains);
-
-        _unlockedTiles = normalized;
-    }
-
-    internal void ApplySnapshotFrom(GameState snapshot)
-    {
-        Coins = snapshot.Coins;
-        RngState = snapshot.RngState;
-        RngStep = snapshot.RngStep;
-        CurrentTile = snapshot.CurrentTile;
-        Board = snapshot.Board.ToDictionary(k => k.Key, v => v.Value);
-        LastMessage = snapshot.LastMessage;
-        SetUnlockedTiles(snapshot.UnlockedTiles);
-    }
-
-    public bool Equals(GameState? other)
-    {
-        if (other is null) return false;
-        if (ReferenceEquals(this, other)) return true;
-
-        if (Coins != other.Coins ||
-            RngState != other.RngState ||
-            RngStep != other.RngStep ||
-            CurrentTile != other.CurrentTile ||
-            Score != other.Score ||
-            LastMessage != other.LastMessage ||
-            Board.Count != other.Board.Count ||
-            _unlockedTiles.Count != other._unlockedTiles.Count)
-        {
-            return false;
-        }
-
-        if (!_unlockedTiles.SetEquals(other._unlockedTiles))
-            return false;
-
-        foreach (var kv in Board)
-        {
-            if (!other.Board.TryGetValue(kv.Key, out var value) || value != kv.Value)
-                return false;
-        }
-
-        return true;
-    }
-
-    public override bool Equals(object? obj) => obj is GameState other && Equals(other);
-
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.Add(Coins);
-        hash.Add(RngState);
-        hash.Add(RngStep);
-        hash.Add(CurrentTile);
-        hash.Add(Score);
-        hash.Add(LastMessage);
-        foreach (var tile in _unlockedTiles)
-            hash.Add(tile);
-        foreach (var kv in Board.OrderBy(x => x.Key))
-        {
-            hash.Add(kv.Key);
-            hash.Add(kv.Value);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    private static int ComputeScore(IReadOnlyDictionary<int, PlacedTile> board)
-    {
-        var score = 0;
-
-        foreach (var placed in board.Values)
-        {
-            if (!ScoreBasePoints.TryGetValue(placed.TileType, out var points))
-                throw new InvalidOperationException($"Missing score rule for tile type {placed.TileType}.");
-
-            score += points;
-        }
-
-        foreach (var kv in board.OrderBy(x => x.Key))
-        {
-            var slot = kv.Key;
-            var tileType = kv.Value.TileType;
-            var x = slot % BoardWidth;
-            var y = slot / BoardWidth;
-
-            if (x < BoardWidth - 1 &&
-                board.TryGetValue(slot + 1, out var right) &&
-                right.TileType == tileType)
+            foreach (var neighbor in HexGrid.GetNeighborSlots(slot))
             {
-                score += 2;
-            }
-
-            if (y < BoardHeight - 1 &&
-                board.TryGetValue(slot + BoardWidth, out var down) &&
-                down.TileType == tileType)
-            {
-                score += 2;
+                if (!Board.ContainsKey(neighbor))
+                    result.Add(neighbor);
             }
         }
 
-        if (board.Count == BoardWidth * BoardHeight)
-            score += 10;
+        return result.ToArray();
+    }
 
-        return score;
+    /// <summary>Stable fingerprint for determinism checks.</summary>
+    public string Fingerprint()
+    {
+        var board = string.Join(";", Board.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value.Tile}:{kv.Value.Rotation}"));
+        var sites = string.Join(";", Sites.Select(s => $"{s.Id}:{s.Type}:{s.Anchor}:{s.Rotation}:{s.Built}"));
+        var quests = string.Join(";", Quests.Select(q => $"{q.Id}:{q.Terrain}:{q.Kind}:{q.Target}"));
+        return $"{Seed}|{Theme}|{RngState}|{Score}|{Streak}|{StackCount}|{CurrentTile}|{string.Join(",", Upcoming)}|{MilestonesReached}|{string.Join(",", Unlocked)}|{quests}|{board}|{Stats}|{IsGameOver}|{UndosRemaining}|{string.Join(",", WonderCards)}|{sites}";
     }
 }

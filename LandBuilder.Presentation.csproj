@@ -5,6 +5,8 @@
     <AssemblyName>LandBuilder.Presentation</AssemblyName>
     <RootNamespace>LandBuilder.Presentation</RootNamespace>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

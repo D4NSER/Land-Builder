@@ -1,5 +1,4 @@
 using LandBuilder.Domain;
-using LandBuilder.Infrastructure;
 
 namespace LandBuilder.Application;
 
@@ -16,12 +15,14 @@ public sealed class InMemoryEventSink : IEventSink
     public void Clear() => _events.Clear();
 }
 
+/// <summary>
+/// Owns the current run: applies placements through <see cref="GameEngine"/>, keeps history for undo,
+/// and forwards events to the presentation.
+/// </summary>
 public sealed class GameSession
 {
-    private readonly DeterministicSimulator _simulator = new();
+    private readonly Stack<GameState> _history = new();
     private readonly IEventSink _sink;
-    private readonly HighScoreRepository? _highScoreRepository;
-    private readonly string? _highScorePath;
 
     public GameState State { get; private set; }
 
@@ -31,39 +32,52 @@ public sealed class GameSession
         _sink = sink;
     }
 
-    public GameSession(GameState initialState, IEventSink sink, HighScoreRepository highScoreRepository, string highScorePath)
-        : this(initialState, sink)
-    {
-        _highScoreRepository = highScoreRepository;
-        _highScorePath = highScorePath;
-    }
+    public static GameSession StartNew(ulong seed, IEventSink sink) => new(GameState.CreateInitial(seed), sink);
 
-    public void IssueCommand(IGameCommand command)
+    public bool CanUndo => _history.Count > 0 && State.UndosRemaining > 0 && !State.IsGameOver;
+
+    public IReadOnlyList<IDomainEvent> Place(int slot, int rotation)
     {
-        var (next, events) = _simulator.Apply(State, command);
-        State = next;
+        var (next, events) = GameEngine.Place(State, slot, rotation);
+        if (!ReferenceEquals(next, State))
+        {
+            _history.Push(State);
+            State = next;
+        }
 
         foreach (var ev in events)
-        {
             _sink.Publish(ev);
-            HandleHighScorePersistence(ev);
-        }
+
+        return events;
     }
 
-    private void HandleHighScorePersistence(IDomainEvent domainEvent)
+    public IReadOnlyList<IDomainEvent> PlaceWonder(int cardIndex, int slot, int rotation)
     {
-        if (domainEvent is not ScoreSubmittedEvent submitted ||
-            _highScoreRepository is null ||
-            string.IsNullOrWhiteSpace(_highScorePath))
+        var (next, events) = GameEngine.PlaceWonder(State, cardIndex, slot, rotation);
+        if (!ReferenceEquals(next, State))
         {
-            return;
+            _history.Push(State);
+            State = next;
         }
 
-        var currentHighScore = _highScoreRepository.LoadHighScore(_highScorePath);
-        if (submitted.Score <= currentHighScore)
-            return;
+        foreach (var ev in events)
+            _sink.Publish(ev);
 
-        _highScoreRepository.SaveHighScore(_highScorePath, submitted.Score);
-        _sink.Publish(new HighScoreUpdatedEvent(currentHighScore, submitted.Score));
+        return events;
+    }
+
+    /// <summary>Restores the state before the last placement. Undos are a limited per-run resource.</summary>
+    public bool TryUndo(out int undoneSlot)
+    {
+        undoneSlot = 0;
+        if (!CanUndo)
+            return false;
+
+        var current = State;
+        var previous = _history.Pop().Clone();
+        previous.UndosRemaining = current.UndosRemaining - 1;
+        undoneSlot = current.Board.Keys.Except(previous.Board.Keys).FirstOrDefault();
+        State = previous;
+        return true;
     }
 }
